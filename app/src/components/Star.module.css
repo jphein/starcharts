@@ -1,0 +1,28 @@
+.star {
+  position: absolute;
+  display: block;
+  width: var(--star-size, 50px);
+  height: var(--star-size, 50px);
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+  mix-blend-mode: screen;
+  will-change: transform, opacity, filter;
+}
+
+.star.button {
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+.star.button:focus-visible {
+  outline: 2px solid var(--sc-gold);
+  outline-offset: 4px;
+  border-radius: 50%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .star {
+    animation: none !important;
+  }
+}

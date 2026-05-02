@@ -1,0 +1,91 @@
+.wrap {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.nebula {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(40px);
+  z-index: 0;
+  will-change: transform;
+}
+
+.nebula1 {
+  width: 70vmax;
+  height: 70vmax;
+  left: -10vmax;
+  top: -8vmax;
+  background: radial-gradient(
+    ellipse at center,
+    var(--sc-nebula-1) 0%,
+    var(--sc-nebula-1) 18%,
+    transparent 62%
+  );
+}
+
+.nebula2 {
+  width: 80vmax;
+  height: 80vmax;
+  right: -18vmax;
+  top: 10vmax;
+  background: radial-gradient(
+    ellipse at center,
+    var(--sc-nebula-2) 0%,
+    var(--sc-nebula-2) 16%,
+    transparent 62%
+  );
+}
+
+.nebula3 {
+  width: 65vmax;
+  height: 65vmax;
+  left: 20vmax;
+  bottom: -20vmax;
+  background: radial-gradient(
+    ellipse at center,
+    var(--sc-nebula-3) 0%,
+    var(--sc-nebula-3) 18%,
+    transparent 62%
+  );
+}
+
+.dustLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.dust {
+  position: absolute;
+  background: var(--sc-dust);
+  border-radius: 50%;
+  opacity: 0.6;
+  animation: scTwinkle var(--scTwinkleDur, 3s) ease-in-out infinite;
+  animation-delay: var(--scTwinkleDelay, 0s);
+  will-change: opacity;
+}
+
+.content {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  min-height: 100vh;
+}
+
+@keyframes scTwinkle {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dust {
+    animation: none;
+    opacity: 0.7;
+  }
+}

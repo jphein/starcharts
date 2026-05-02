@@ -10,6 +10,7 @@ import GiftFlow from "./screens/GiftFlow";
 import SummonFlow from "./screens/SummonFlow";
 import GoalReached from "./screens/GoalReached";
 import ConstellationMemory from "./screens/ConstellationMemory";
+import SkyTest from "./screens/SkyTest";
 
 export function App() {
   return (
@@ -25,6 +26,7 @@ export function App() {
           <Route path="/charts/:id/summon" element={<SummonFlow />} />
           <Route path="/charts/:id/celebrate" element={<GoalReached />} />
           <Route path="/charts/:id/memory" element={<ConstellationMemory />} />
+          <Route path="/sky-test" element={<SkyTest />} />
           <Route path="*" element={<Placeholder name="Lost in the sky" hint="no route matches" />} />
         </Routes>
       </HashRouter>
