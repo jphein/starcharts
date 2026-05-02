@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Starcharts — Preset Preview</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><radialGradient id='g'><stop offset='0%25' stop-color='%23fff5d4'/><stop offset='100%25' stop-color='%23b8893a'/></radialGradient></defs><path d='M16 2 L20 12 L30 12 L22 18 L25 28 L16 22 L7 28 L10 18 L2 12 L12 12 Z' fill='url(%23g)'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --serif: 'Cormorant Garamond', 'EB Garamond', Georgia, serif;
+    --sans: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Sky palettes — copied verbatim from design_handoff/tokens.jsx */
+  [data-palette="midnight"][data-mode="dark"] {
+    --g0: #040616; --g1: #0a0e2c; --g2: #101536; --g3: #06081a;
+    --neb1: rgba(72,84,180,0.30); --neb2: rgba(180,120,200,0.18); --neb3: rgba(255,200,140,0.10);
+    --fg: #f4f1e6; --fg-muted: rgba(244,241,230,0.62);
+    --surface: rgba(20,24,52,0.72); --stroke: rgba(244,241,230,0.14); --gold: #f3c46b;
+  }
+  [data-palette="midnight"][data-mode="light"] {
+    --g0: #fde8d4; --g1: #fbd4c2; --g2: #f5b8b8; --g3: #d99dbe;
+    --neb1: rgba(255,180,140,0.40); --neb2: rgba(220,160,200,0.30); --neb3: rgba(255,220,180,0.30);
+    --fg: #3b2330; --fg-muted: rgba(59,35,48,0.62);
+    --surface: rgba(255,251,245,0.78); --stroke: rgba(59,35,48,0.14); --gold: #c98a3c;
+  }
+  [data-palette="nebula"][data-mode="dark"] {
+    --g0: #08051c; --g1: #1a0a3a; --g2: #2a0d54; --g3: #100530;
+    --neb1: rgba(180,80,220,0.35); --neb2: rgba(220,120,180,0.22); --neb3: rgba(120,180,240,0.14);
+    --fg: #f6effa; --fg-muted: rgba(246,239,250,0.62);
+    --surface: rgba(40,18,72,0.72); --stroke: rgba(246,239,250,0.16); --gold: #f5c46b;
+  }
+  [data-palette="nebula"][data-mode="light"] {
+    --g0: #f5e6ff; --g1: #e8c8f5; --g2: #d8a8e8; --g3: #c084d4;
+    --neb1: rgba(220,140,240,0.35); --neb2: rgba(180,140,220,0.30); --neb3: rgba(255,200,240,0.30);
+    --fg: #2a0e3a; --fg-muted: rgba(42,14,58,0.6);
+    --surface: rgba(255,250,254,0.8); --stroke: rgba(42,14,58,0.14); --gold: #9a3da8;
+  }
+  [data-palette="dawn"][data-mode="dark"] {
+    --g0: #0a1838; --g1: #1a2c5a; --g2: #3a3060; --g3: #180d2a;
+    --neb1: rgba(255,180,140,0.30); --neb2: rgba(220,140,180,0.22); --neb3: rgba(180,160,240,0.18);
+    --fg: #fff4e8; --fg-muted: rgba(255,244,232,0.62);
+    --surface: rgba(28,40,80,0.72); --stroke: rgba(255,244,232,0.16); --gold: #ffc878;
+  }
+  [data-palette="dawn"][data-mode="light"] {
+    --g0: #ffeed4; --g1: #ffd5b8; --g2: #ffb6a0; --g3: #e8a8c0;
+    --neb1: rgba(255,180,140,0.40); --neb2: rgba(220,160,200,0.30); --neb3: rgba(255,220,180,0.30);
+    --fg: #3a1c20; --fg-muted: rgba(58,28,32,0.62);
+    --surface: rgba(255,250,242,0.8); --stroke: rgba(58,28,32,0.14); --gold: #c46a3a;
+  }
+  [data-palette="aurora"][data-mode="dark"] {
+    --g0: #03120c; --g1: #062420; --g2: #0a3a32; --g3: #021a14;
+    --neb1: rgba(80,200,160,0.30); --neb2: rgba(120,180,240,0.22); --neb3: rgba(180,220,140,0.18);
+    --fg: #eaf6ee; --fg-muted: rgba(234,246,238,0.62);
+    --surface: rgba(8,40,32,0.72); --stroke: rgba(234,246,238,0.16); --gold: #a8e8b8;
+  }
+  [data-palette="aurora"][data-mode="light"] {
+    --g0: #e8fbf0; --g1: #c8f0d8; --g2: #a8e0d4; --g3: #88c8d8;
+    --neb1: rgba(120,200,180,0.35); --neb2: rgba(160,200,220,0.30); --neb3: rgba(200,240,200,0.30);
+    --fg: #0f2820; --fg-muted: rgba(15,40,32,0.62);
+    --surface: rgba(248,255,250,0.82); --stroke: rgba(15,40,32,0.14); --gold: #3a8a6a;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; min-height: 100%; }
+  body {
+    font-family: var(--sans);
+    color: var(--fg);
+    background:
+      radial-gradient(ellipse at 20% 15%, var(--neb1), transparent 60%),
+      radial-gradient(ellipse at 80% 70%, var(--neb2), transparent 55%),
+      radial-gradient(ellipse at 50% 95%, var(--neb3), transparent 65%),
+      linear-gradient(160deg, var(--g0) 0%, var(--g1) 35%, var(--g2) 70%, var(--g3) 100%);
+    background-size: 140% 140%, 140% 140%, 140% 140%, 100% 100%;
+    background-position: 20% 15%, 80% 70%, 50% 95%, 0 0;
+    background-attachment: fixed;
+    min-height: 100vh;
+    padding: 36px 28px 80px;
+    animation: nebula-breath 60s ease-in-out infinite alternate;
+  }
+  @keyframes nebula-breath {
+    0%   { background-position: 20% 15%, 80% 70%, 50% 95%, 0 0; }
+    50%  { background-position: 26% 22%, 72% 64%, 56% 90%, 0 0; }
+    100% { background-position: 18% 18%, 84% 74%, 48% 98%, 0 0; }
+  }
+
+  /* ── Distant sky layer ─────────────────────────────── */
+  .sky-layer {
+    position: fixed;
+    inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+  }
+  .sky-layer svg { width: 100%; height: 100%; display: block; }
+  .sky-layer circle { fill: var(--fg); }
+
+  /* Three drift layers — closer stars move faster */
+  .drift-near  { animation: drift-x 90s linear infinite; }
+  .drift-mid   { animation: drift-x 140s linear infinite; }
+  .drift-far   { animation: drift-x 220s linear infinite; }
+  @keyframes drift-x {
+    from { transform: translate3d(0, 0, 0); }
+    to   { transform: translate3d(-15px, 4px, 0); }
+  }
+
+  /* Per-star twinkle (random delay/duration set inline) */
+  .twinkle { animation-name: twinkle; animation-iteration-count: infinite; animation-timing-function: ease-in-out; }
+  @keyframes twinkle {
+    0%, 100% { opacity: var(--alpha-low,  0.30); }
+    50%      { opacity: var(--alpha-high, 0.95); }
+  }
+
+  /* Header + grid lift above the sky layer */
+  header, .grid, footer { position: relative; z-index: 1; }
+
+  header {
+    max-width: 1200px;
+    margin: 0 auto 28px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    justify-content: space-between;
+    gap: 18px;
+  }
+  .title-block { flex: 1 1 auto; min-width: 280px; }
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    margin: 0 0 4px;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 42px;
+    line-height: 1;
+    margin: 0 0 8px;
+    color: var(--fg);
+  }
+  .subtitle {
+    font-size: 14px;
+    color: var(--fg-muted);
+    margin: 0;
+    max-width: 60ch;
+  }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .pill-group {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: var(--surface);
+    border: 1px solid var(--stroke);
+    border-radius: 999px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .pill {
+    appearance: none; border: 0;
+    background: transparent;
+    color: var(--fg-muted);
+    font-family: var(--sans);
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .pill:hover { color: var(--fg); }
+  .pill[aria-pressed="true"] { background: var(--gold); color: #0a0a14; }
+
+  .grid {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 18px;
+  }
+  .card {
+    border-radius: 18px;
+    background: var(--surface);
+    border: 1px solid var(--stroke);
+    box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    padding: 18px 18px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    transition: transform 0.4s cubic-bezier(0.2, 0.7, 0.2, 1),
+                box-shadow 0.4s ease,
+                border-color 0.4s ease;
+  }
+  .card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 38px rgba(0,0,0,0.28),
+                0 0 0 1px var(--gold);
+    border-color: transparent;
+  }
+  .hero {
+    width: 100%;
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+    border-radius: 14px;
+    position: relative;
+    background:
+      radial-gradient(circle at 50% 50%, rgba(255,255,255,0.04), transparent 70%),
+      linear-gradient(160deg, rgba(255,255,255,0.02), rgba(0,0,0,0.18));
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .hero img {
+    width: 80%; height: 80%;
+    object-fit: contain;
+    image-rendering: -webkit-optimize-contrast;
+    opacity: 0;
+    transform: scale(0.2);
+    will-change: transform, opacity, filter;
+  }
+  /* Arrival bloom — matches handoff spec: 0.2 → 1.08 → 1.0 over 1.2s, with halo bloom */
+  .hero img.arrived {
+    animation: star-arrive 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  }
+  @keyframes star-arrive {
+    0%   { opacity: 0;    transform: scale(0.2); filter: brightness(2.4) blur(2px); }
+    55%  { opacity: 1;    transform: scale(1.08); filter: brightness(1.6) blur(0); }
+    75%  { transform: scale(0.98); filter: brightness(1.2); }
+    100% { opacity: 1;    transform: scale(1.0);  filter: brightness(1.0); }
+  }
+  /* After arrival, settle into one of five idle animation styles.
+     The animation-name + duration is selected by the [data-anim=...] attribute on body.
+     fill-mode: both is critical — without it, the random animation-delay window leaves
+     the img falling back to the .hero img base styles (opacity:0, scale(0.2)) and the
+     card goes invisible for up to --idle-delay seconds when the user swaps animations.
+     'both' fills the first keyframe during delay, so the img sits in its starting pose. */
+  .hero img.idle {
+    animation-iteration-count: infinite;
+    animation-delay: var(--idle-delay, 0s);
+    animation-fill-mode: both;
+    opacity: 1;
+  }
+
+  /* 1. Twinkle — gentle breath. Default. */
+  [data-anim="twinkle"]       .hero img.idle {
+    animation-name: hero-twinkle;
+    animation-duration: 4.5s;
+    animation-timing-function: ease-in-out;
+  }
+  @keyframes hero-twinkle {
+    0%, 100% { opacity: 1.0;  transform: scale(1.0);  filter: brightness(1.0)  saturate(1.0); }
+    50%      { opacity: 0.85; transform: scale(1.05); filter: brightness(1.35) saturate(1.2); }
+  }
+
+  /* 2. Pulse — radiant halo bloom. The image grows + brightens; the .hero::after
+     halo (inside the panel, so not clipped) blooms in sync behind it. */
+  [data-anim="pulse"]         .hero img.idle {
+    animation-name: hero-pulse;
+    animation-duration: 3.8s;
+    animation-timing-function: ease-in-out;
+  }
+  @keyframes hero-pulse {
+    0%, 100% { transform: scale(0.97); filter: brightness(0.92) saturate(0.95); }
+    50%      { transform: scale(1.10); filter: brightness(1.55) saturate(1.4); }
+  }
+  /* Synced halo bloom behind the star — the existing ::after, animated */
+  [data-anim="pulse"] .hero::after {
+    animation: halo-bloom 3.8s ease-in-out infinite;
+  }
+  @keyframes halo-bloom {
+    0%, 100% { opacity: 0;    transform: scale(0.85); }
+    50%      { opacity: 0.40; transform: scale(1.05); }
+  }
+
+  /* 3. Drift — orbital float. Translate + tilt + breath. */
+  [data-anim="drift"]         .hero img.idle {
+    animation-name: hero-drift;
+    animation-duration: 8s;
+    animation-timing-function: ease-in-out;
+  }
+  @keyframes hero-drift {
+    0%   { transform: translate(0,    -8px) rotate(0deg)    scale(1.00); }
+    25%  { transform: translate(10px,   0)  rotate(1.5deg)  scale(1.025); }
+    50%  { transform: translate(0,     8px) rotate(0deg)    scale(1.00); }
+    75%  { transform: translate(-10px,  0)  rotate(-1.5deg) scale(1.025); }
+    100% { transform: translate(0,    -8px) rotate(0deg)    scale(1.00); }
+  }
+
+  /* 4. Sparkle — long stillness, three brilliant flashes per cycle. */
+  [data-anim="sparkle"]       .hero img.idle {
+    animation-name: hero-sparkle;
+    animation-duration: 6s;
+    animation-timing-function: ease-out;
+  }
+  @keyframes hero-sparkle {
+    0%, 14%, 22%, 44%, 52%, 74%, 82%, 100% {
+      transform: scale(0.98); filter: brightness(0.92) saturate(0.95);
+    }
+    16% { transform: scale(1.18); filter: brightness(2.1) saturate(1.5); }
+    18% { transform: scale(1.04); filter: brightness(1.3) saturate(1.15); }
+    46% { transform: scale(1.14); filter: brightness(1.85) saturate(1.4); }
+    48% { transform: scale(1.03); filter: brightness(1.25) saturate(1.1); }
+    76% { transform: scale(1.20); filter: brightness(2.2) saturate(1.55); }
+    78% { transform: scale(1.05); filter: brightness(1.35) saturate(1.15); }
+  }
+
+  /* 5. Constellation — slow celestial rotation with a faint breath. */
+  [data-anim="constellation"] .hero img.idle {
+    animation-name: hero-spin;
+    animation-duration: 36s;
+    animation-timing-function: linear;
+  }
+  @keyframes hero-spin {
+    0%   { transform: rotate(0deg)    scale(1.00); filter: brightness(1.00); }
+    25%  { transform: rotate(90deg)   scale(1.03); filter: brightness(1.15); }
+    50%  { transform: rotate(180deg)  scale(1.00); filter: brightness(1.00); }
+    75%  { transform: rotate(270deg)  scale(1.03); filter: brightness(1.15); }
+    100% { transform: rotate(360deg)  scale(1.00); filter: brightness(1.00); }
+  }
+  /* Card hover gives the hero an extra glow halo */
+  .hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(circle at 50% 50%, var(--gold), transparent 65%);
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    pointer-events: none;
+    mix-blend-mode: screen;
+  }
+  .card:hover .hero::after { opacity: 0.18; }
+  .hero.checker {
+    background-image:
+      linear-gradient(45deg, rgba(255,255,255,0.10) 25%, transparent 25%),
+      linear-gradient(-45deg, rgba(255,255,255,0.10) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.10) 75%),
+      linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.10) 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+    background-color: rgba(80,80,100,0.4);
+  }
+
+  .scale-row {
+    display: flex; align-items: end; justify-content: center;
+    gap: 14px; width: 100%; height: 64px;
+  }
+  .scale-row img { object-fit: contain; }
+  .scale-96 { width: 96px; height: 96px; margin-top: -16px; }
+  .scale-48 { width: 48px; height: 48px; }
+  .scale-24 { width: 24px; height: 24px; }
+
+  .meta {
+    width: 100%;
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 8px;
+  }
+  .label {
+    font-family: var(--serif);
+    font-size: 18px; font-weight: 500; color: var(--fg);
+  }
+  .slug {
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    font-feature-settings: "tnum";
+  }
+  .badge {
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--stroke);
+    color: var(--fg-muted);
+  }
+  .badge.extra { color: var(--gold); border-color: var(--gold); opacity: 0.7; }
+  .badge.pending { color: var(--fg-muted); opacity: 0.6; }
+
+  .pending-state {
+    color: var(--fg-muted);
+    font-size: 12px;
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+  }
+  .pending-state .glyph {
+    display: block;
+    font-size: 28px;
+    color: var(--fg-muted);
+    margin-bottom: 6px;
+    opacity: 0.4;
+    animation: drift 4s ease-in-out infinite;
+  }
+  @keyframes drift {
+    0%, 100% { transform: translateY(0); opacity: 0.4; }
+    50%      { transform: translateY(-3px); opacity: 0.7; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    body, .drift-near, .drift-mid, .drift-far,
+    .twinkle, .pending-state .glyph,
+    .hero img.idle { animation: none !important; }
+    .hero img.arrived { animation: none; opacity: 1; transform: none; filter: none; }
+    .card { transition: none; }
+  }
+
+  footer {
+    max-width: 1200px;
+    margin: 32px auto 0;
+    text-align: center;
+    color: var(--fg-muted);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  footer .gold { color: var(--gold); }
+</style>
+</head>
+<body data-palette="midnight" data-mode="dark" data-anim="twinkle">
+
+<!-- Distant drifting sky — three parallax layers populated by JS -->
+<div class="sky-layer" aria-hidden="true">
+  <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
+    <g class="drift-far"  id="sky-far"></g>
+    <g class="drift-mid"  id="sky-mid"></g>
+    <g class="drift-near" id="sky-near"></g>
+  </svg>
+</div>
+
+<header>
+  <div class="title-block">
+    <p class="eyebrow">Starcharts · Preset Preview</p>
+    <h1>The Curated Sky</h1>
+    <p class="subtitle">Live preview of generated preset PNGs against each sky palette. Click any star to flip its panel to a transparency checkerboard.</p>
+  </div>
+  <div class="controls">
+    <div class="pill-group" role="radiogroup" aria-label="Sky palette">
+      <button class="pill" data-palette-set="midnight" aria-pressed="true">Midnight</button>
+      <button class="pill" data-palette-set="nebula"   aria-pressed="false">Nebula</button>
+      <button class="pill" data-palette-set="dawn"     aria-pressed="false">Dawn</button>
+      <button class="pill" data-palette-set="aurora"   aria-pressed="false">Aurora</button>
+    </div>
+    <div class="pill-group" role="radiogroup" aria-label="Mode">
+      <button class="pill" data-mode-set="dark"  aria-pressed="true">Dark</button>
+      <button class="pill" data-mode-set="light" aria-pressed="false">Light</button>
+    </div>
+    <div class="pill-group" role="radiogroup" aria-label="Animation">
+      <button class="pill" data-anim-set="twinkle"       aria-pressed="true">Twinkle</button>
+      <button class="pill" data-anim-set="pulse"         aria-pressed="false">Pulse</button>
+      <button class="pill" data-anim-set="drift"         aria-pressed="false">Drift</button>
+      <button class="pill" data-anim-set="sparkle"       aria-pressed="false">Sparkle</button>
+      <button class="pill" data-anim-set="constellation" aria-pressed="false">Constellation</button>
+    </div>
+    <div class="pill-group">
+      <button class="pill" id="refresh" title="Re-fetch all images">↻ Refresh</button>
+    </div>
+  </div>
+</header>
+
+<div class="grid" id="grid"></div>
+
+<footer>
+  <span id="count">…</span> · <span class="gold">stars.realm.watch</span>
+</footer>
+
+<script>
+  // Slugs match scripts/generate-stars.py PRESETS keys.
+  // First 12 are the design-handoff canonical preset families;
+  // trailing 2 exist in the script but aren't in the handoff PRESET_LIST.
+  const PRESETS = [
+    { slug: 'gold-sparkle',    label: 'Gold sparkle' },
+    { slug: 'ruby-twinkle',    label: 'Ruby twinkle' },
+    { slug: 'amethyst-nebula', label: 'Amethyst nebula' },
+    { slug: 'pearl-shimmer',   label: 'Moon pearl' },
+    { slug: 'emerald-glint',   label: 'Emerald glint' },
+    { slug: 'aurora-ribbon',   label: 'Aurora ribbon' },
+    { slug: 'copper-ember',    label: 'Copper ember' },
+    { slug: 'frost-crystal',   label: 'Frost crystal' },
+    { slug: 'cosmic-rose',     label: 'Cosmic rose' },
+    { slug: 'comet-trail',     label: 'Comet trail' },
+    { slug: 'rainbow-burst',   label: 'Rainbow burst' },
+    { slug: 'dragon-fire',     label: 'Dragon fire' },
+    { slug: 'silver-crescent', label: 'Silver crescent', extra: true },
+    { slug: 'supernova-bloom', label: 'Supernova bloom', extra: true },
+  ];
+
+  const grid = document.getElementById('grid');
+  const countEl = document.getElementById('count');
+
+  // Tiny safe DOM helpers — no innerHTML anywhere.
+  function el(tag, props = {}, children = []) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (k === 'class') node.className = v;
+      else if (k === 'text') node.textContent = v;
+      else if (k.startsWith('data-')) node.setAttribute(k, v);
+      else if (k === 'src' || k === 'alt' || k === 'title' || k === 'id') node[k] = v;
+      else node.setAttribute(k, v);
+    }
+    for (const c of children) if (c) node.appendChild(c);
+    return node;
+  }
+  function img(src, alt, cls) {
+    const i = document.createElement('img');
+    i.src = src;
+    i.alt = alt || '';
+    if (cls) i.className = cls;
+    return i;
+  }
+
+  function buildCards(bust) {
+    grid.replaceChildren();
+    PRESETS.forEach(p => {
+      const card = el('div', { class: 'card', 'data-slug': p.slug });
+      const src = `../assets/stars/${p.slug}.png?v=${bust}`;
+
+      // Hero panel — large preview, click toggles alpha checker
+      const heroImg = img(src, p.label);
+      const hero = el('div', { class: 'hero', title: 'Click to toggle transparency check' }, [heroImg]);
+      hero.addEventListener('click', () => hero.classList.toggle('checker'));
+
+      // Scale row — 96 / 48 / 24 px to verify silhouette holds at small sizes
+      const scaleRow = el('div', { class: 'scale-row' }, [
+        img(src, '', 'scale-96'),
+        img(src, '', 'scale-48'),
+        img(src, '', 'scale-24'),
+      ]);
+
+      // Label + slug
+      const meta = el('div', { class: 'meta' }, [
+        el('span', { class: 'label', text: p.label }),
+        el('span', { class: 'slug', text: p.slug }),
+      ]);
+
+      card.appendChild(hero);
+      card.appendChild(scaleRow);
+      card.appendChild(meta);
+
+      if (p.extra) {
+        card.appendChild(el('span', { class: 'badge extra', text: 'extra · not in handoff' }));
+      }
+
+      // Per-hero idle-animation desync so the grid doesn't pulse in unison.
+      // 1.5s max keeps it in cache + makes pill-swap feel responsive.
+      heroImg.style.setProperty('--idle-delay', `${(Math.random() * 1.5).toFixed(2)}s`);
+
+      // Track load state + play arrival bloom, then settle into idle twinkle
+      heroImg.addEventListener('load', () => {
+        card.dataset.state = 'loaded';
+        heroImg.classList.add('arrived');
+        heroImg.addEventListener('animationend', function onArrive(e) {
+          if (e.animationName !== 'star-arrive') return;
+          heroImg.classList.add('idle');
+          heroImg.removeEventListener('animationend', onArrive);
+        });
+        refreshCount();
+      });
+      heroImg.addEventListener('error', () => { showPending(card, p.slug); refreshCount(); });
+
+      grid.appendChild(card);
+    });
+    refreshCount();
+  }
+
+  function showPending(card, slug) {
+    card.dataset.state = 'pending';
+    const hero = card.querySelector('.hero');
+    hero.replaceChildren(
+      el('div', { class: 'pending-state' }, [
+        el('span', { class: 'glyph', text: '✦' }),
+        document.createTextNode('awaiting '),
+        el('br'),
+        document.createTextNode(`${slug}.png`),
+      ])
+    );
+    card.querySelectorAll('.scale-row img').forEach(i => i.style.opacity = 0);
+    if (!card.querySelector('.badge.pending')) {
+      card.appendChild(el('span', { class: 'badge pending', text: 'pending' }));
+    }
+  }
+
+  function refreshCount() {
+    const total = PRESETS.length;
+    const loaded  = grid.querySelectorAll('[data-state="loaded"]').length;
+    const pending = grid.querySelectorAll('[data-state="pending"]').length;
+    countEl.textContent = `${loaded} loaded · ${pending} pending · ${total} total`;
+  }
+
+  // Palette + mode controls
+  document.querySelectorAll('[data-palette-set]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.body.dataset.palette = btn.dataset.paletteSet;
+      document.querySelectorAll('[data-palette-set]').forEach(b =>
+        b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+    });
+  });
+  document.querySelectorAll('[data-mode-set]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.body.dataset.mode = btn.dataset.modeSet;
+      document.querySelectorAll('[data-mode-set]').forEach(b =>
+        b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+    });
+  });
+  document.querySelectorAll('[data-anim-set]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.body.dataset.anim = btn.dataset.animSet;
+      document.querySelectorAll('[data-anim-set]').forEach(b =>
+        b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+    });
+  });
+  document.getElementById('refresh').addEventListener('click', () => buildCards(Date.now()));
+
+  // ── Distant sky ──────────────────────────────────────
+  // Populate three parallax layers with twinkling pinprick stars in SVG userspace
+  // (viewBox is 0..100 on each axis — coords are percentages).
+  function seedSky() {
+    const layers = [
+      { id: 'sky-far',  count: 60, rRange: [0.07, 0.18], aRange: [0.20, 0.55], dur: [4.5, 7.5] },
+      { id: 'sky-mid',  count: 38, rRange: [0.12, 0.28], aRange: [0.35, 0.75], dur: [3.5, 6.0] },
+      { id: 'sky-near', count: 22, rRange: [0.20, 0.40], aRange: [0.55, 0.95], dur: [2.8, 5.2] },
+    ];
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    for (const layer of layers) {
+      const g = document.getElementById(layer.id);
+      if (!g) continue;
+      // Cover slightly past edges so drift doesn't reveal seams
+      for (let i = 0; i < layer.count; i++) {
+        const c = document.createElementNS(SVG_NS, 'circle');
+        const cx = -2 + Math.random() * 104;
+        const cy = -2 + Math.random() * 104;
+        const r  = layer.rRange[0] + Math.random() * (layer.rRange[1] - layer.rRange[0]);
+        const aHigh = layer.aRange[0] + Math.random() * (layer.aRange[1] - layer.aRange[0]);
+        const aLow  = aHigh * (0.25 + Math.random() * 0.35);
+        const dur = layer.dur[0] + Math.random() * (layer.dur[1] - layer.dur[0]);
+        const delay = -Math.random() * dur; // negative so they start mid-cycle, desynced
+        c.setAttribute('cx', cx);
+        c.setAttribute('cy', cy);
+        c.setAttribute('r',  r);
+        c.classList.add('twinkle');
+        c.style.setProperty('--alpha-low',  aLow.toFixed(2));
+        c.style.setProperty('--alpha-high', aHigh.toFixed(2));
+        c.style.animationDuration = `${dur.toFixed(2)}s`;
+        c.style.animationDelay    = `${delay.toFixed(2)}s`;
+        g.appendChild(c);
+      }
+    }
+  }
+  seedSky();
+
+  // Initial render — ts in query string busts cache so re-runs of the script show new art
+  buildCards(Date.now());
+</script>
+
+</body>
+</html>

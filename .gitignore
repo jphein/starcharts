@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.yarn/
+
+# Build output
+dist/
+build/
+.vite/
+.next/
+.turbo/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Tooling cruft
+.playwright-mcp/
+
+# Python (generation tooling)
+venv/
+__pycache__/
+*.pyc
+
+# Untracked starter archive (extract or remove rather than commit)
+Star Charts.zip
+
+# Logs
+*.log
+npm-debug.log*

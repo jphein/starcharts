@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Starcharts — Star Examples</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><radialGradient id='g'><stop offset='0%25' stop-color='%23fff5d4'/><stop offset='100%25' stop-color='%23b8893a'/></radialGradient></defs><path d='M16 2 L20 12 L30 12 L22 18 L25 28 L16 22 L7 28 L10 18 L2 12 L12 12 Z' fill='url(%23g)'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --bg-deep: #0a0e27;
+  --bg-mid: #1a1f3a;
+  --bg-card: rgba(255, 255, 255, 0.04);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.18);
+  --fg: #f5f0e0;
+  --fg-muted: #a8a3b8;
+  --fg-soft: rgba(245, 240, 224, 0.55);
+  --accent: #e6c47a;
+  --accent-soft: rgba(230, 196, 122, 0.5);
+  --serif: 'Cormorant Garamond', 'EB Garamond', Georgia, serif;
+  --sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-deep: #fbf3e8;
+    --bg-mid: #f3e6d2;
+    --bg-card: rgba(255, 255, 255, 0.5);
+    --border: rgba(80, 50, 30, 0.08);
+    --border-hover: rgba(80, 50, 30, 0.2);
+    --fg: #2a1f3a;
+    --fg-muted: #6a5a7a;
+    --fg-soft: rgba(42, 31, 58, 0.6);
+    --accent: #b8893a;
+    --accent-soft: rgba(184, 137, 58, 0.4);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--sans);
+  background:
+    radial-gradient(ellipse at 20% 10%, rgba(120, 80, 200, 0.12), transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(80, 130, 200, 0.10), transparent 50%),
+    radial-gradient(ellipse at 50% 100%, var(--bg-mid), var(--bg-deep));
+  color: var(--fg);
+  min-height: 100vh;
+  overflow-x: hidden;
+  font-weight: 300;
+  line-height: 1.55;
+}
+
+@media (prefers-color-scheme: light) {
+  body {
+    background:
+      radial-gradient(ellipse at 20% 10%, rgba(255, 200, 160, 0.4), transparent 50%),
+      radial-gradient(ellipse at 80% 20%, rgba(255, 220, 200, 0.3), transparent 50%),
+      radial-gradient(ellipse at 50% 100%, var(--bg-mid), var(--bg-deep));
+  }
+}
+
+/* Subtle ambient background twinkle */
+.bg-twinkle {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 18%, rgba(255,255,255,0.6), transparent 50%),
+    radial-gradient(1px 1px at 28% 64%, rgba(255,255,255,0.5), transparent 50%),
+    radial-gradient(2px 2px at 76% 12%, rgba(255,220,180,0.4), transparent 50%),
+    radial-gradient(1px 1px at 44% 88%, rgba(255,255,255,0.5), transparent 50%),
+    radial-gradient(1.5px 1.5px at 92% 50%, rgba(200,180,255,0.4), transparent 50%),
+    radial-gradient(1px 1px at 16% 50%, rgba(255,255,255,0.5), transparent 50%),
+    radial-gradient(2px 2px at 64% 76%, rgba(255,255,255,0.4), transparent 50%),
+    radial-gradient(1px 1px at 56% 32%, rgba(180,210,255,0.4), transparent 50%);
+  animation: drift 90s linear infinite;
+  opacity: 0.7;
+}
+
+@media (prefers-color-scheme: light) {
+  .bg-twinkle { opacity: 0.35; }
+}
+
+@keyframes drift {
+  from { background-position: 0 0; }
+  to { background-position: 200px -100px; }
+}
+
+main { position: relative; z-index: 1; }
+
+header {
+  text-align: center;
+  padding: 80px 24px 30px;
+}
+
+.eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+h1 {
+  font-family: var(--serif);
+  font-size: clamp(2.4rem, 6vw, 4rem);
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  margin: 0 0 14px;
+  line-height: 1.05;
+}
+
+.subtitle {
+  color: var(--fg-muted);
+  font-size: 1.05rem;
+  font-style: italic;
+  font-family: var(--serif);
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+section {
+  padding: 50px 24px 70px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.section-header {
+  text-align: center;
+  margin-bottom: 50px;
+}
+
+h2 {
+  font-family: var(--serif);
+  font-size: clamp(1.8rem, 4vw, 2.4rem);
+  font-weight: 500;
+  margin: 0 0 12px;
+  color: var(--fg);
+}
+
+h2 .accent {
+  color: var(--accent);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.section-blurb {
+  color: var(--fg-muted);
+  max-width: 600px;
+  margin: 0 auto;
+  font-size: 0.97rem;
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 22px;
+}
+
+.star-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 28px 20px 22px;
+  text-align: center;
+  position: relative;
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.3s, background 0.3s;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.star-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--border-hover);
+}
+
+.star-stage {
+  width: 130px;
+  height: 130px;
+  margin: 0 auto 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.star-stage svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.star-name {
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  font-weight: 500;
+  font-style: italic;
+  margin: 0 0 4px;
+  letter-spacing: 0.01em;
+  color: var(--fg);
+}
+
+.star-prompt {
+  font-style: italic;
+  color: var(--fg-soft);
+  font-size: 0.85rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.star-prompt::before { content: '"'; opacity: 0.6; }
+.star-prompt::after { content: '"'; opacity: 0.6; }
+
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-soft), transparent);
+  margin: 0 24px;
+}
+
+footer {
+  text-align: center;
+  padding: 50px 24px 70px;
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+  font-family: var(--serif);
+  max-width: 700px;
+  margin: 0 auto;
+  line-height: 1.7;
+}
+
+footer p { margin: 6px 0; }
+
+/* ─── Star Animations ─────────────────────────── */
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+@keyframes spin-fast { to { transform: rotate(360deg); } }
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+@keyframes shimmer {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+@keyframes wave {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes flicker {
+  0%, 100% { opacity: 0.7; }
+  20%, 60% { opacity: 1; }
+  40%, 80% { opacity: 0.5; }
+}
+@keyframes orbit-slow { to { transform: rotate(360deg); } }
+@keyframes nebula-breathe {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.08); }
+}
+
+.spin-slow { animation: spin-slow 50s linear infinite; transform-origin: center; transform-box: fill-box; }
+.spin-med { animation: spin-slow 30s linear infinite; transform-origin: center; transform-box: fill-box; }
+.pulse { animation: pulse 4s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
+.pulse-soft { animation: pulse-soft 3s ease-in-out infinite; }
+.shimmer { animation: shimmer 2.6s ease-in-out infinite; }
+.wave { animation: wave 5s ease-in-out infinite; }
+.flicker { animation: flicker 2.4s ease-in-out infinite; }
+.orbit { animation: orbit-slow 18s linear infinite; transform-origin: center; transform-box: fill-box; }
+.nebula-breathe { animation: nebula-breathe 6s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
+</style>
+</head>
+<body>
+
+<div class="bg-twinkle" aria-hidden="true"></div>
+
+<main>
+<header>
+  <div class="eyebrow">starcharts</div>
+  <h1>Stars in Two Hands</h1>
+  <p class="subtitle">A look at the curated SVG presets, and the LLM-generated SVG customs they sit beside.</p>
+</header>
+
+<section>
+  <div class="section-header">
+    <h2>Curated <span class="accent">presets</span></h2>
+    <p class="section-blurb">Hand-designed SVG. Each preset has its own palette, glow, and small animation. Stars within a preset are identical — beauty in clusters comes from arrangement, not per-star variance.</p>
+  </div>
+
+  <div class="gallery">
+
+    <!-- ★ Gold Sparkle ───────────────────────── -->
+    <div class="star-card">
+      <div class="star-stage">
+        <svg viewBox="-60 -60 120 120">
+          <defs>
+            <radialGradient id="gold-fill" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#fff8e0"/>
+              <stop offset="35%" stop-color="#f4cc4a"/>
+              <stop offset="100%" stop-color="#a07020"/>
+            </radialGradient>
+            <filter id="gold-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <g class="spin-slow">
+            <path d="M 0,-42 L 12,-13 L 42,-13 L 18,7 L 27,38 L 0,20 L -27,38 L -18,7 L -42,-13 L -12,-13 Z"
+                  fill="url(#gold-fill)" filter="url(#gold-glow)"/>
+            <circle cx="0" cy="0" r="5" fill="#fff8e0" opacity="0.9"/>
+            <g opacity="0.7" stroke="#fff5d4" stroke-width="1.2" stroke-linecap="round">
+              <line x1="0" y1="-50" x2="0" y2="-58"/>
+              <line x1="0" y1="50" x2="0" y2="58"/>
+              <line x1="-50" y1="0" x2="-58" y2="0"/>
+              <line x1="50" y1="0" x2="58" y2="0"/>
+            </g>
+          </g>
+        </svg>
+      </div>
+      <p class="star-name">Gold Sparkle</p>
+      <p class="star-prompt">Classic. Warm. The default.</p>
+    </div>
+
+    <!-- ★ Ruby Twinkle ───────────────────────── -->
+    <div class="star-card">
+      <div class="star-stage">
+        <svg viewBox="-60 -60 120 120">
+          <defs>
+            <radialGradient id="ruby-fill" cx="50%" cy="40%" r="60%">
+              <stop offset="0%" stop-color="#ffe8f0"/>
+              <stop offset="30%" stop-color="#ff5577"/>
+              <stop offset="100%" stop-color="#7a0a25"/>
+            </radialGradient>
+            <filter id="ruby-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2.5" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <g class="pulse" filter="url(#ruby-glow)">
+            <!-- 4-point sparkle cross (long thin diamonds) -->
+            <path d="M 0,-50 L 7,0 L 0,50 L -7,0 Z" fill="url(#ruby-fill)"/>
+            <path d="M -50,0 L 0,-7 L 50,0 L 0,7 Z" fill="url(#ruby-fill)"/>
+            <!-- diagonal subtle cross -->
+            <g opacity="0.5">
+              <path d="M -32,-32 L 0,-4 L 32,32 L 0,4 Z" fill="#ff7a99"/>
+              <path d="M 32,-32 L 4,0 L -32,32 L -4,0 Z" fill="#ff7a99"/>
+            </g>
+            <circle cx="0" cy="0" r="4" fill="#ffeef3"/>
+          </g>
+        </svg>
+      </div>
+      <p class="star-name">Ruby Twinkle</p>
+      <p class="star-prompt">Sharp, bright, with a heart.</p>
+    </div>
+
+    <!-- ★ Amethyst Nebula ─────────────────────── -->
+    <div class="star-card">
+      <div class="star-stage">
+        <svg viewBox="-60 -60 120 120">
+          <defs>
+            <radialGradient id="amethyst-cloud" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#d4a8ff" stop-opacity="0.9"/>
+              <stop offset="60%" stop-color="#7a3fc4" stop-opacity="0.4"/>
+              <stop offset="100%" stop-color="#3a1a5a" stop-opacity="0"/>
+            </radialGradient>
+            <radialGradient id="amethyst-fill" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#f4e0ff"/>
+              <stop offset="40%" stop-color="#b87ae6"/>
+              <stop offset="100%" stop-color="#5a2a8a"/>
+            </radialGradient>
+          </defs>
+          <!-- nebula clouds -->
+          <ellipse cx="-15" cy="-10" rx="48" ry="36" fill="url(#amethyst-cloud)" class="nebula-breathe"/>
+          <ellipse cx="18" cy="14" rx="42" ry="30" fill="url(#amethyst-cloud)" opacity="0.7" class="nebula-breathe" style="animation-delay: -3s;"/>
+          <!-- dust stars -->
+          <g class="orbit">
+            <circle cx="38" cy="-20" r="1.5" fill="#fff" opacity="0.9"/>
+            <circle cx="-32" cy="22" r="1.2" fill="#e0c4ff" opacity="0.8"/>
+            <circle cx="22" cy="34" r="1" fill="#fff" opacity="0.7"/>
+            <circle cx="-40" cy="-12" r="1.3" fill="#d4a8ff" opacity="0.85"/>
+          </g>
+          <!-- 6-point center star -->
+          <g class="pulse-soft">
+            <path d="M 0,-22 L 6,-6 L 22,0 L 6,6 L 0,22 L -6,6 L -22,0 L -6,-6 Z" fill="url(#amethyst-fill)"/>
+            <circle cx="0" cy="0" r="3" fill="#fff" opacity="0.9"/>
+          </g>
+        </svg>
+      </div>
+      <p class="star-name">Amethyst Nebula</p>
+      <p class="star-prompt">A star inside its own galaxy.</p>
+    </div>
+
+    <!-- ★ Silver Crescent ─────────────────────── -->
+    <div class="star-card">
+      <div class="star-stage">
+        <svg viewBox="-60 -60 120 120">
+          <defs>
+            <radialGradient id="silver-fill" cx="40%" cy="40%" r="60%">
+              <stop offset="0%" stop-color="#fafcff"/>
+              <stop offset="60%" stop-color="#c8d4e8"/>
+              <stop offset="100%" stop-color="#5a6478"/>
+            </radialGradient>
+            <filter id="silver-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2.5"/>
+            </filter>
+          </defs>
+          <!-- soft outer glow -->
+          <circle cx="-4" cy="0" r="38" fill="#a0b4d8" opacity="0.18" filter="url(#silver-glow)"/>
+          <!-- crescent: large circle minus offset circle -->
+          <g class="pulse-soft">
+            <path d="M 28,-28 A 38,38 0 1 0 28,28 A 28,28 0 1 1 28,-28 Z" fill="url(#silver-fill)"/>
+          </g>
+          <!-- companion star -->
+          <g transform="translate(28,-22)" class="flicker">
+            <path d="M 0,-7 L 2,-2 L 7,0 L 2,2 L 0,7 L -2,2 L -7,0 L -2,-2 Z" fill="#fff"/>
+          </g>
+          <!-- tiny lower companion -->
+          <circle cx="-32" cy="32" r="1.4" fill="#fff" opacity="0.7"/>
+        </svg>
+      </div>
+      <p class="star-name">Silver Crescent</p>
+      <p class="star-prompt">Cool, quiet, with a friend.</p>
+    </div>
+
+    <!-- ★ Aurora Ribbon ───────────────────────── -->
+    <div class="star-card">
+      <div class="star-stage">
+        <svg viewBox="-60 -60 120 120">
+          <defs>
+            <linearGradient id="aurora-fill" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#5affb8"/>
+              <stop offset="35%" stop-color="#5fdaf0"/>
+              <stop offset="65%" stop-color="#a880ff"/>
+              <stop offset="100%" stop-color="#ff7ac8"/>
+            </linearGradient>
+            <filter id="aurora-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2.5" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <g class="wave" filter="url(#aurora-glow)">
+            <!-- flowing ribbon path -->
+            <path d="M -48,-8 Q -28,-30 -8,-12 T 28,-8 Q 44,-12 50,4 Q 30,28 8,14 T -28,18 Q -44,22 -48,-8 Z"
+                  fill="url(#aurora-fill)" opacity="0.85"/>
+            <!-- inner ribbon highlight -->
+            <path d="M -36,-4 Q -20,-20 -4,-8 T 22,-4 Q 36,-6 40,4 Q 24,20 8,10 T -20,14 Q -34,18 -36,-4 Z"
+                  fill="url(#aurora-fill)" opacity="0.6"/>
+          </g>
+          <!-- center star embedded -->
+          <g class="pulse-soft">
+            <path d="M 0,-14 L 4,-4 L 14,0 L 4,4 L 0,14 L -4,4 L -14,0 L -4,-4 Z" fill="#fff" opacity="0.95"/>
+          </g>
+        </svg>
+      </div>
+      <p class="star-name">Aurora Ribbon</p>
+      <p class="star-prompt">A star riding the northern light.</p>
+    </div>
+
+    <!-- ★ Pearl Shimmer ───────────────────────── -->
+    <div class="star-card">
+      <div class="star-stage">
+        <svg viewBox="-60 -60 120 120">
+          <defs>
+            <radialGradient id="pearl-fill" cx="40%" cy="35%" r="65%">
+              <stop offset="0%" stop-color="#ffffff"/>
+              <stop offset="35%" stop-color="#fff0e8"/>
+              <stop offset="60%" stop-color="#e8d4f0"/>
+              <stop offset="85%" stop-color="#c8b4d4"/>
+              <stop offset="100%" stop-color="#8a7a98"/>
+            </radialGradient>
+            <radialGradient id="pearl-iris" cx="65%" cy="65%" r="35%">
+              <stop offset="0%" stop-color="#a0e4ff" stop-opacity="0.7"/>
+              <stop offset="100%" stop-color="#a0e4ff" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <!-- soft outer halo -->
+          <circle cx="0" cy="0" r="38" fill="#fff" opacity="0.08"/>
+          <!-- pearl body -->
+          <g class="pulse-soft">
+            <circle cx="0" cy="0" r="32" fill="url(#pearl-fill)"/>
+            <!-- iridescent sheen -->
+            <circle cx="0" cy="0" r="32" fill="url(#pearl-iris)" class="shimmer"/>
+            <!-- highlight -->
+            <ellipse cx="-9" cy="-12" rx="9" ry="6" fill="#fff" opacity="0.7" transform="rotate(-30)"/>
+            <ellipse cx="-12" cy="-14" rx="3" ry="2" fill="#fff" opacity="0.95"/>
+          </g>
+        </svg>
+      </div>
+      <p class="star-name">Pearl Shimmer</p>
+      <p class="star-prompt">Gentle. Iridescent. Quietly proud.</p>
+    </div>
+
+    <!-- ★ Comet Trail ───────────────────────── -->
+    <div class="star-card">
+      <div class="star-stage">
+        <svg viewBox="-60 -60 120 120">
+          <defs>
+            <radialGradient id="comet-head" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#ffffff"/>
+              <stop offset="40%" stop-color="#7ad8ff"/>
+              <stop offset="100%" stop-color="#1a4080"/>
+            </radialGradient>
+            <linearGradient id="comet-tail" x1="100%" y1="50%" x2="0%" y2="50%">
+              <stop offset="0%" stop-color="#7ad8ff" stop-opacity="0.95"/>
+              <stop offset="40%" stop-color="#a8e8ff" stop-opacity="0.5"/>
+              <stop offset="100%" stop-color="#a8e8ff" stop-opacity="0"/>
+            </linearGradient>
+            <filter id="comet-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2.5" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <g class="pulse-soft" filter="url(#comet-glow)">
+            <!-- tail (curved, fading left) -->
+            <path d="M 18,4 Q -10,-2 -48,-12 Q -10,4 -50,18 Q -8,12 18,-4 Z" fill="url(#comet-tail)"/>
+            <!-- head star -->
+            <g transform="translate(20, 0)">
+              <path d="M 0,-18 L 5,-5 L 18,0 L 5,5 L 0,18 L -5,5 L -18,0 L -5,-5 Z" fill="url(#comet-head)"/>
+              <circle cx="0" cy="0" r="4" fill="#fff"/>
+            </g>
+          </g>
+        </svg>
+      </div>
+      <p class="star-name">Comet Trail</p>
+      <p class="star-prompt">A star going somewhere.</p>
+    </div>
+
+    <!-- ★ Supernova Bloom ─────────────────────── -->
+    <div class="star-card">
+      <div class="star-stage">
+        <svg viewBox="-60 -60 120 120">
+          <defs>
+            <radialGradient id="nova-core" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#ffffff"/>
+              <stop offset="30%" stop-color="#fff5b0"/>
+              <stop offset="70%" stop-color="#ff8a3a"/>
+              <stop offset="100%" stop-color="#a02020"/>
+            </radialGradient>
+            <radialGradient id="nova-halo" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#ffba70" stop-opacity="0.7"/>
+              <stop offset="100%" stop-color="#ff6030" stop-opacity="0"/>
+            </radialGradient>
+            <filter id="nova-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <!-- outer halo -->
+          <circle cx="0" cy="0" r="50" fill="url(#nova-halo)" class="pulse-soft"/>
+          <!-- back layer of long spikes -->
+          <g class="spin-slow" opacity="0.6">
+            <g transform="rotate(22.5)">
+              <path d="M 0,-52 L 4,0 L 0,52 L -4,0 Z" fill="#ffba70"/>
+              <path d="M -52,0 L 0,-4 L 52,0 L 0,4 Z" fill="#ffba70"/>
+              <path d="M -36,-36 L 0,-3 L 36,36 L 0,3 Z" fill="#ffba70"/>
+              <path d="M 36,-36 L 3,0 L -36,36 L -3,0 Z" fill="#ffba70"/>
+            </g>
+          </g>
+          <!-- front 8-point burst -->
+          <g class="pulse" filter="url(#nova-glow)">
+            <path d="M 0,-44 L 6,-6 L 44,0 L 6,6 L 0,44 L -6,6 L -44,0 L -6,-6 Z" fill="url(#nova-core)"/>
+            <path d="M -28,-28 L 0,-4 L 28,28 L 0,4 Z" fill="url(#nova-core)" opacity="0.85"/>
+            <path d="M 28,-28 L 4,0 L -28,28 L -4,0 Z" fill="url(#nova-core)" opacity="0.85"/>
+            <circle cx="0" cy="0" r="6" fill="#ffffff"/>
+          </g>
+        </svg>
+      </div>
+      <p class="star-name">Supernova Bloom</p>
+      <p class="star-prompt">For when someone really showed up.</p>
+    </div>
+
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section>
+  <div class="section-header">
+    <h2>LLM-generated <span class="accent">customs</span></h2>
+    <p class="section-blurb">User types a short prompt. An LLM (Claude, GPT-4) writes a one-shot SVG. The output renders natively in the sky — vector, transparent, animatable, free to scale. These three are written by hand to demonstrate what the LLM should aim for.</p>
+  </div>
+
+  <div class="gallery">
+
+    <!-- ✦ Generated 1: fireflies and starlight -->
+    <div class="star-card">
+      <div class="star-stage">
+        <svg viewBox="-60 -60 120 120">
+          <defs>
+            <radialGradient id="fly-glow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#fffacc" stop-opacity="1"/>
+              <stop offset="60%" stop-color="#a8d860" stop-opacity="0.6"/>
+              <stop offset="100%" stop-color="#a8d860" stop-opacity="0"/>
+            </radialGradient>
+            <filter id="fly-blur" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="0.8"/>
+            </filter>
+          </defs>
+          <!-- soft star-shape backing glow -->
+          <path d="M 0,-44 L 13,-13 L 44,-13 L 19,7 L 28,40 L 0,21 L -28,40 L -19,7 L -44,-13 L -13,-13 Z"
+                fill="url(#fly-glow)" opacity="0.4"/>
+          <!-- many small fireflies arranged in star -->
+          <g class="pulse-soft">
+            <!-- top point -->
+            <circle cx="0" cy="-40" r="2.2" fill="#fffabc" filter="url(#fly-blur)"/>
+            <circle cx="3" cy="-32" r="1.5" fill="#e8f098"/>
+            <circle cx="-3" cy="-30" r="1.8" fill="#fffabc"/>
+            <circle cx="0" cy="-22" r="1.3" fill="#c8e070"/>
+            <!-- right arm -->
+            <circle cx="40" cy="-12" r="2.3" fill="#fffabc" filter="url(#fly-blur)"/>
+            <circle cx="32" cy="-10" r="1.6" fill="#e8f098"/>
+            <circle cx="24" cy="-8" r="1.4" fill="#fffabc"/>
+            <circle cx="14" cy="-6" r="1.2" fill="#c8e070"/>
+            <!-- bottom right -->
+            <circle cx="28" cy="36" r="2.0" fill="#fffabc" filter="url(#fly-blur)"/>
+            <circle cx="22" cy="28" r="1.5" fill="#e8f098"/>
+            <circle cx="14" cy="20" r="1.3" fill="#fffabc"/>
+            <circle cx="8" cy="12" r="1.1" fill="#c8e070"/>
+            <!-- bottom left -->
+            <circle cx="-28" cy="36" r="2.1" fill="#fffabc" filter="url(#fly-blur)"/>
+            <circle cx="-22" cy="28" r="1.5" fill="#e8f098"/>
+            <circle cx="-14" cy="20" r="1.4" fill="#fffabc"/>
+            <circle cx="-8" cy="12" r="1.1" fill="#c8e070"/>
+            <!-- left arm -->
+            <circle cx="-40" cy="-12" r="2.2" fill="#fffabc" filter="url(#fly-blur)"/>
+            <circle cx="-32" cy="-10" r="1.6" fill="#e8f098"/>
+            <circle cx="-24" cy="-8" r="1.4" fill="#fffabc"/>
+            <circle cx="-14" cy="-6" r="1.2" fill="#c8e070"/>
+            <!-- center cluster -->
+            <circle cx="0" cy="0" r="2.5" fill="#fffacc" filter="url(#fly-blur)"/>
+            <circle cx="-4" cy="2" r="1.3" fill="#fffabc"/>
+            <circle cx="4" cy="-2" r="1.4" fill="#e8f098"/>
+          </g>
+          <!-- twinkly individuals -->
+          <circle cx="-18" cy="-22" r="1" fill="#fff" class="flicker"/>
+          <circle cx="18" cy="22" r="1" fill="#fff" class="flicker" style="animation-delay: -1.2s;"/>
+          <circle cx="20" cy="-26" r="0.9" fill="#fff" class="flicker" style="animation-delay: -2s;"/>
+        </svg>
+      </div>
+      <p class="star-name">Firefly Star</p>
+      <p class="star-prompt">a star made of fireflies and starlight</p>
+    </div>
+
+    <!-- ✦ Generated 2: woven wheat and gold thread -->
+    <div class="star-card">
+      <div class="star-stage">
+        <svg viewBox="-60 -60 120 120">
+          <defs>
+            <linearGradient id="wheat-1" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#f4e0a8"/>
+              <stop offset="50%" stop-color="#d8b060"/>
+              <stop offset="100%" stop-color="#8a6020"/>
+            </linearGradient>
+            <linearGradient id="wheat-2" x1="100%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#fff5cc"/>
+              <stop offset="50%" stop-color="#e8c878"/>
+              <stop offset="100%" stop-color="#a07830"/>
+            </linearGradient>
+            <filter id="wheat-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="1.5" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <g class="spin-slow" filter="url(#wheat-glow)">
+            <!-- two interwoven 5-point stars at offset rotations -->
+            <g transform="rotate(0)">
+              <path d="M 0,-40 L 9,-12 L 38,-12 L 16,6 L 24,34 L 0,18 L -24,34 L -16,6 L -38,-12 L -9,-12 Z"
+                    fill="none" stroke="url(#wheat-1)" stroke-width="3.5" stroke-linejoin="round"/>
+            </g>
+            <g transform="rotate(36)">
+              <path d="M 0,-40 L 9,-12 L 38,-12 L 16,6 L 24,34 L 0,18 L -24,34 L -16,6 L -38,-12 L -9,-12 Z"
+                    fill="none" stroke="url(#wheat-2)" stroke-width="3.5" stroke-linejoin="round" opacity="0.85"/>
+            </g>
+            <!-- braid texture: small dashes -->
+            <g stroke="#a07830" stroke-width="0.7" opacity="0.5">
+              <path d="M 0,-36 L 0,-30" />
+              <path d="M 22,-12 L 28,-12" />
+              <path d="M -22,-12 L -28,-12" />
+              <path d="M 14,18 L 18,22" />
+              <path d="M -14,18 L -18,22" />
+            </g>
+            <!-- center knot -->
+            <circle cx="0" cy="0" r="5" fill="url(#wheat-1)"/>
+            <circle cx="0" cy="0" r="2" fill="#fff5cc"/>
+          </g>
+        </svg>
+      </div>
+      <p class="star-name">Woven Star</p>
+      <p class="star-prompt">a star woven from wheat and gold thread</p>
+    </div>
+
+    <!-- ✦ Generated 3: dragon's eye -->
+    <div class="star-card">
+      <div class="star-stage">
+        <svg viewBox="-60 -60 120 120">
+          <defs>
+            <radialGradient id="eye-iris" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#fff8a0"/>
+              <stop offset="40%" stop-color="#5acc70"/>
+              <stop offset="80%" stop-color="#1a6440"/>
+              <stop offset="100%" stop-color="#0a2a18"/>
+            </radialGradient>
+            <linearGradient id="eye-shine" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#fff" stop-opacity="0.95"/>
+              <stop offset="100%" stop-color="#fff" stop-opacity="0"/>
+            </linearGradient>
+            <filter id="eye-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <!-- outer subtle scaled glow -->
+          <ellipse cx="0" cy="0" rx="50" ry="34" fill="#3a8050" opacity="0.18"/>
+          <g filter="url(#eye-glow)">
+            <!-- almond eye shape -->
+            <path d="M -44,0 Q -22,-26 0,-24 Q 22,-26 44,0 Q 22,26 0,24 Q -22,26 -44,0 Z"
+                  fill="url(#eye-iris)"/>
+            <!-- vertical slit pupil -->
+            <ellipse cx="0" cy="0" rx="3" ry="20" fill="#0a0a0a" class="pulse-soft"/>
+            <!-- highlight -->
+            <ellipse cx="-12" cy="-8" rx="10" ry="4" fill="url(#eye-shine)" transform="rotate(-15)"/>
+          </g>
+          <!-- starbursts at the four corners (where the eye "sparkles") -->
+          <g class="flicker" stroke="#fff" stroke-width="1" stroke-linecap="round" opacity="0.9">
+            <line x1="-46" y1="-2" x2="-54" y2="-4"/>
+            <line x1="-50" y1="0" x2="-58" y2="0"/>
+            <line x1="46" y1="-2" x2="54" y2="-4"/>
+            <line x1="50" y1="0" x2="58" y2="0"/>
+            <line x1="0" y1="-26" x2="0" y2="-32"/>
+            <line x1="0" y1="26" x2="0" y2="32"/>
+          </g>
+          <!-- tiny green sparks -->
+          <circle cx="36" cy="-18" r="1.2" fill="#90ffb0" class="flicker" style="animation-delay: -0.6s;"/>
+          <circle cx="-36" cy="18" r="1.0" fill="#90ffb0" class="flicker" style="animation-delay: -1.4s;"/>
+        </svg>
+      </div>
+      <p class="star-name">Dragon's Eye</p>
+      <p class="star-prompt">a dragon's eye, watching, made of stars</p>
+    </div>
+
+  </div>
+</section>
+
+<footer>
+  <p>Each preset SVG is portable as a React component — drop the <code style="font-family: ui-monospace, monospace;">&lt;svg&gt;</code> into JSX, parameterize size via a prop, and you have your renderer.</p>
+  <p>Generated stars follow the same shape: the LLM returns SVG inside a <code style="font-family: ui-monospace, monospace;">120 × 120</code> viewBox with the star centered at <code style="font-family: ui-monospace, monospace;">(0, 0)</code>, transparent background, and any animations expressed as inline CSS keyframes or class hooks.</p>
+</footer>
+</main>
+
+</body>
+</html>
