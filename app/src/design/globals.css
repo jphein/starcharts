@@ -1,0 +1,69 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--sc-sans);
+  color: var(--sc-fg);
+  background:
+    radial-gradient(ellipse at 20% 10%, var(--sc-nebula-1), transparent 55%),
+    radial-gradient(ellipse at 80% 30%, var(--sc-nebula-2), transparent 55%),
+    radial-gradient(ellipse at 50% 100%, var(--sc-bg-mid), var(--sc-bg-edge));
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+button, input, textarea, select { font: inherit; color: inherit; }
+
+a { color: inherit; }
+
+/* Seeds — overwritten at runtime by ThemeProvider. These are the
+   midnight/dark defaults so the page paints sensibly even on the
+   first frame before useEffect runs. */
+:root {
+  /* Sky gradient stops */
+  --sc-bg-edge:  #040616;
+  --sc-bg-deep:  #0a0e2c;
+  --sc-bg-mid:   #101536;
+  --sc-bg-far:   #06081a;
+
+  /* Foreground */
+  --sc-fg:        #f4f1e6;
+  --sc-fg-muted:  rgba(244,241,230,0.62);
+  --sc-fg-faint:  rgba(244,241,230,0.32);
+
+  /* Surfaces & accent */
+  --sc-surface:        rgba(20,24,52,0.72);
+  --sc-surface-solid:  #0d1130;
+  --sc-stroke:         rgba(244,241,230,0.14);
+  --sc-gold:           #f3c46b;
+  --sc-dust:           #9bb0e8;
+
+  /* Nebulae (rgba composed by ThemeProvider) */
+  --sc-nebula-1: rgba(59,45,110,0.35);
+  --sc-nebula-2: rgba(28,78,122,0.28);
+  --sc-nebula-3: rgba(90,42,82,0.22);
+
+  /* Type */
+  --sc-serif:         "Cormorant Garamond", "EB Garamond", Georgia, serif;
+  --sc-sans:          "Inter", system-ui, sans-serif;
+  --sc-serif-weight:  500;
+
+  /* Spacing & radii (fixed across themes) */
+  --sc-radius-tile:    18px;
+  --sc-radius-pill:    999px;
+  --sc-radius-inline:  8px;
+  --sc-gap:            16px;
+
+  /* Shadows */
+  --sc-shadow-tile: 0 8px 28px rgba(0,0,0,0.18);
+}
