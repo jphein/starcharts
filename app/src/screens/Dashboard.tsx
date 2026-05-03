@@ -89,9 +89,16 @@ export default function Dashboard() {
     }
   }, [userLoading, user, navigate]);
 
+  // Profile gate: signed in but no displayName yet → first-time profile setup.
+  useEffect(() => {
+    if (!userLoading && user && !user.displayName.trim()) {
+      navigate("/profile-setup", { replace: true });
+    }
+  }, [userLoading, user, navigate]);
+
   // Group gate: signed in but no current group → group setup.
   useEffect(() => {
-    if (!userLoading && user && !groupLoading && !group) {
+    if (!userLoading && user && user.displayName.trim() && !groupLoading && !group) {
       navigate("/group-setup", { replace: true });
     }
   }, [userLoading, user, groupLoading, group, navigate]);

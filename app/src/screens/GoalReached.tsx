@@ -111,9 +111,7 @@ export default function GoalReached() {
             key={key}
             style={gift.style}
             customImageUrl={
-              gift.starImageUrl && gift.starImageUrl.startsWith("data:")
-                ? gift.starImageUrl
-                : undefined
+              gift.style === "custom" ? gift.starImageUrl : undefined
             }
             x={pos.x}
             y={pos.y}
