@@ -1,6 +1,7 @@
 import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "./design/theme";
 import { Placeholder } from "./components/Placeholder";
+import { Sigil } from "./components/Sigil";
 
 import SignIn from "./screens/SignIn";
 import ProfileSetup from "./screens/ProfileSetup";
@@ -33,6 +34,7 @@ export function App() {
           <Route path="/sky-test" element={<SkyTest />} />
           <Route path="*" element={<Placeholder name="Lost in the sky" hint="no route matches" />} />
         </Routes>
+        <Sigil />
       </HashRouter>
     </ThemeProvider>
   );
