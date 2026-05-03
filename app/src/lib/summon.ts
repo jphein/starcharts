@@ -1,9 +1,12 @@
 // Frontend client for the summon Worker.
 //
-// The Worker accepts `{ prompt }`, calls Azure AI Foundry, stores the
-// resulting PNG in R2, and returns `{ url }`. This module is the only
-// place in the app that knows that contract — screens import
-// `summonStar` and treat any failure as a `SummonError`.
+// The Worker accepts `{ prompt, groupId }`, calls Azure AI Foundry,
+// stores the resulting PNG in R2, and returns `{ url }`. This module
+// is the only place in the app that knows that contract — screens
+// import `summonStar` and treat any failure as a `SummonError`.
+// On a 429 the Worker returns `{ scope, retryAfterSeconds }`; we
+// surface that as a `RateLimitError` so SummonFlow can render a
+// calmer "the sky is full" message instead of the generic failure path.
 
 const DEFAULT_ENDPOINT = "https://summon.stars.realm.watch/api/summon";
 
@@ -21,17 +24,37 @@ export class SummonError extends Error {
   }
 }
 
+export class RateLimitError extends SummonError {
+  scope: "group" | "ip";
+  retryAfterSeconds: number;
+
+  constructor(message: string, scope: "group" | "ip", retryAfterSeconds: number) {
+    super(message);
+    this.name = "RateLimitError";
+    this.scope = scope;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
 export interface SummonResult {
   url: string;
 }
 
-export async function summonStar(prompt: string): Promise<SummonResult> {
-  const trimmed = prompt.trim();
+export interface SummonArgs {
+  prompt: string;
+  groupId: string;
+}
+
+export async function summonStar(args: SummonArgs): Promise<SummonResult> {
+  const trimmed = args.prompt.trim();
   if (trimmed.length < PROMPT_MIN) {
     throw new SummonError("Tell us a little about the star you imagine.");
   }
   if (trimmed.length > PROMPT_MAX) {
     throw new SummonError(`Keep it under ${PROMPT_MAX} characters.`);
+  }
+  if (!args.groupId) {
+    throw new SummonError("Couldn't tell which group you're in — try refreshing.");
   }
 
   const controller = new AbortController();
@@ -42,7 +65,7 @@ export async function summonStar(prompt: string): Promise<SummonResult> {
     response = await fetch(SUMMON_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: trimmed }),
+      body: JSON.stringify({ prompt: trimmed, groupId: args.groupId }),
       signal: controller.signal,
     });
   } catch (err) {
@@ -54,8 +77,23 @@ export async function summonStar(prompt: string): Promise<SummonResult> {
     clearTimeout(timer);
   }
 
+  if (response.status === 429) {
+    const data = await readErrorPayload(response);
+    const scope = data?.scope === "ip" ? "ip" : "group";
+    const retry =
+      typeof data?.retryAfterSeconds === "number" && data.retryAfterSeconds > 0
+        ? data.retryAfterSeconds
+        : 3600;
+    const message =
+      typeof data?.error === "string" && data.error.length > 0
+        ? data.error
+        : "the sky is full for now — try again later.";
+    throw new RateLimitError(message, scope, retry);
+  }
+
   if (!response.ok) {
-    const detail = await readErrorMessage(response);
+    const data = await readErrorPayload(response);
+    const detail = typeof data?.error === "string" ? data.error : null;
     if (response.status >= 400 && response.status < 500) {
       throw new SummonError(detail ?? "That prompt didn't take. Try rephrasing.");
     }
@@ -81,14 +119,16 @@ export async function summonStar(prompt: string): Promise<SummonResult> {
   return { url: (payload as { url: string }).url };
 }
 
-async function readErrorMessage(response: Response): Promise<string | null> {
+interface ErrorPayload {
+  error?: unknown;
+  scope?: unknown;
+  retryAfterSeconds?: unknown;
+}
+
+async function readErrorPayload(response: Response): Promise<ErrorPayload | null> {
   try {
-    const data = (await response.json()) as { error?: unknown };
-    if (typeof data.error === "string" && data.error.length > 0) {
-      return data.error;
-    }
+    return (await response.json()) as ErrorPayload;
   } catch {
-    // fall through
+    return null;
   }
-  return null;
 }

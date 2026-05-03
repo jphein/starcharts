@@ -1,6 +1,6 @@
 // Starcharts summon Worker.
 //
-// POST /api/summon  { prompt: string }  → { url: string }
+// POST /api/summon  { prompt: string, groupId: string }  → { url: string }
 //
 // Proxies a user prompt through to Azure AI Foundry's gpt-image-1.5
 // deployment, decodes the returned base64 PNG, stores it in R2, and
@@ -8,8 +8,13 @@
 //
 // GET /r2/<key>  → bytes  (fallback when PUBLIC_BUCKET_URL isn't set)
 //
+// Rate-limits (per-group day, per-IP hour) live in KV. Content
+// moderation is intentionally not done here — Azure's content filter
+// is the single source of truth for what's allowed through the model.
+//
 // Secrets / bindings:
 //   - BUCKET                   R2 bucket binding (wrangler.toml)
+//   - RATE_LIMIT_KV            KV namespace for counters
 //   - AZURE_OPENAI_ENDPOINT    e.g. https://...cognitiveservices.azure.com
 //   - AZURE_OPENAI_API_KEY
 //   - AZURE_OPENAI_DEPLOYMENT  e.g. gpt-image-1.5
@@ -18,6 +23,7 @@
 
 export interface Env {
   BUCKET: R2Bucket;
+  RATE_LIMIT_KV: KVNamespace;
   AZURE_OPENAI_ENDPOINT: string;
   AZURE_OPENAI_API_KEY: string;
   AZURE_OPENAI_DEPLOYMENT: string;
@@ -34,6 +40,13 @@ const ALLOWED_ORIGINS = new Set([
 
 const PROMPT_MIN = 1;
 const PROMPT_MAX = 200;
+
+// Rate-limit caps. Adjust here, redeploy. KV counter TTLs are sized
+// to the bucket window plus a small buffer so they self-clean.
+const GROUP_DAILY_CAP = 10;
+const IP_HOURLY_CAP = 30;
+const SECONDS_IN_DAY = 86_400;
+const SECONDS_IN_HOUR = 3_600;
 
 const SYSTEM_PREFIX =
   "A single magical star object on a fully transparent background.";
@@ -70,10 +83,9 @@ async function handleSummon(request: Request, env: Env): Promise<Response> {
     return json({ error: "invalid JSON body" }, 400);
   }
 
-  const rawPrompt =
-    body && typeof body === "object" && "prompt" in body
-      ? (body as { prompt: unknown }).prompt
-      : undefined;
+  const obj = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const rawPrompt = obj.prompt;
+  const rawGroupId = obj.groupId;
 
   if (typeof rawPrompt !== "string") {
     return json({ error: "prompt must be a string" }, 400);
@@ -84,6 +96,26 @@ async function handleSummon(request: Request, env: Env): Promise<Response> {
   }
   if (prompt.length > PROMPT_MAX) {
     return json({ error: `prompt must be ${PROMPT_MAX} chars or fewer` }, 400);
+  }
+  if (typeof rawGroupId !== "string" || !/^[a-zA-Z0-9-]{6,64}$/.test(rawGroupId)) {
+    return json({ error: "groupId is required" }, 400);
+  }
+  const groupId = rawGroupId;
+
+  // Rate-limits run before we touch Azure or R2 — refuse fast and cheap.
+  const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+  const limit = await checkRateLimits(env, groupId, ip);
+  if (limit.blocked) {
+    const headers = new Headers({ "Content-Type": "application/json; charset=utf-8" });
+    headers.set("Retry-After", String(limit.retryAfterSeconds));
+    return new Response(
+      JSON.stringify({
+        error: limit.message,
+        scope: limit.scope,
+        retryAfterSeconds: limit.retryAfterSeconds,
+      }),
+      { status: 429, headers },
+    );
   }
 
   const wrapped = `${SYSTEM_PREFIX} ${prompt}. ${SYSTEM_SUFFIX}`;
@@ -158,7 +190,118 @@ async function handleSummon(request: Request, env: Env): Promise<Response> {
     ? `${publicBase}/${key}`
     : new URL(`/r2/${key}`, request.url).toString();
 
+  // Bump counters only after a successful generation — failed Azure
+  // calls don't burn the user's daily quota. Errors here are logged
+  // but don't fail the response; the user already got their star.
+  await bumpRateLimits(env, groupId, ip).catch((err) => {
+    console.error("rate-limit bump failed", err);
+  });
+
   return json({ url: imageUrl }, 200);
+}
+
+interface RateLimitDecision {
+  blocked: boolean;
+  scope?: "group" | "ip";
+  retryAfterSeconds: number;
+  message: string;
+}
+
+interface BucketSpec {
+  scope: "group" | "ip";
+  key: string;
+  cap: number;
+  ttlSeconds: number;
+  retryAfterSeconds: number;
+  blockedMessage: string;
+}
+
+function rateLimitBuckets(groupId: string, ip: string, now: Date): BucketSpec[] {
+  const day = `${now.getUTCFullYear()}${pad2(now.getUTCMonth() + 1)}${pad2(now.getUTCDate())}`;
+  const hour = `${day}${pad2(now.getUTCHours())}`;
+  return [
+    {
+      scope: "group",
+      key: `g:${groupId}:${day}`,
+      cap: GROUP_DAILY_CAP,
+      ttlSeconds: SECONDS_IN_DAY + SECONDS_IN_HOUR,
+      retryAfterSeconds: secondsUntilNextUtcDay(now),
+      blockedMessage: `your group's sky is full for today (${GROUP_DAILY_CAP} custom stars). more space tomorrow.`,
+    },
+    {
+      scope: "ip",
+      key: `ip:${ip}:${hour}`,
+      cap: IP_HOURLY_CAP,
+      ttlSeconds: SECONDS_IN_HOUR + 300,
+      retryAfterSeconds: secondsUntilNextUtcHour(now),
+      blockedMessage: "too many summons in the last hour from this device — try again shortly.",
+    },
+  ];
+}
+
+async function checkRateLimits(
+  env: Env,
+  groupId: string,
+  ip: string,
+): Promise<RateLimitDecision> {
+  const buckets = rateLimitBuckets(groupId, ip, new Date());
+  for (const b of buckets) {
+    const current = await readCount(env.RATE_LIMIT_KV, b.key);
+    if (current >= b.cap) {
+      return {
+        blocked: true,
+        scope: b.scope,
+        retryAfterSeconds: b.retryAfterSeconds,
+        message: b.blockedMessage,
+      };
+    }
+  }
+  return { blocked: false, retryAfterSeconds: 0, message: "" };
+}
+
+async function bumpRateLimits(env: Env, groupId: string, ip: string): Promise<void> {
+  const buckets = rateLimitBuckets(groupId, ip, new Date());
+  // KV doesn't have atomic counters; read-modify-write is fine at this
+  // scale — worst case a burst of N concurrent requests overshoots by
+  // a few. Run in parallel since both writes are independent.
+  await Promise.all(
+    buckets.map(async (b) => {
+      const current = await readCount(env.RATE_LIMIT_KV, b.key);
+      await env.RATE_LIMIT_KV.put(b.key, String(current + 1), {
+        expirationTtl: b.ttlSeconds,
+      });
+    }),
+  );
+}
+
+async function readCount(kv: KVNamespace, key: string): Promise<number> {
+  const raw = await kv.get(key);
+  if (!raw) return 0;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+function pad2(n: number): string {
+  return n.toString().padStart(2, "0");
+}
+
+function secondsUntilNextUtcDay(now: Date): number {
+  const next = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
+  );
+  return Math.max(60, Math.ceil((next.getTime() - now.getTime()) / 1000));
+}
+
+function secondsUntilNextUtcHour(now: Date): number {
+  const next = new Date(
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      now.getUTCHours() + 1,
+    ),
+  );
+  return Math.max(30, Math.ceil((next.getTime() - now.getTime()) / 1000));
 }
 
 async function handleR2(key: string, env: Env): Promise<Response> {
