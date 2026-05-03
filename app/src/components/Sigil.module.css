@@ -1,8 +1,9 @@
-/* Realm sigil — bottom-right floating version badge.
+/* Realm sigil — bottom-left floating version badge.
  *
  * Idle: a small pill with a pulsing ✦, the realm word, and the short
  * git hash. Always-on so the deployed version is identifiable at a
- * glance.
+ * glance. Anchored bottom-LEFT specifically to keep clear of
+ * InstantDB's dev-only devtools toggler at bottom-right.
  *
  * Open (hover/focus/click): expands upward into a panel that lists
  * realm, commit, branch, build time, and a link to the commit on

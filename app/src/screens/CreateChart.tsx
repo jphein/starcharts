@@ -84,7 +84,7 @@ export default function CreateChart() {
     <Sky>
       <main style={mainStyle}>
         <section style={panelStyle}>
-          <p style={eyebrowStyle}>starcharts</p>
+          <p style={eyebrowStyle}>Starcharts</p>
           <h1 style={headlineStyle}>Begin a new sky.</h1>
           <p style={subStyle}>
             Three things — a name, a goal, and the reward you'll celebrate.

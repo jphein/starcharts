@@ -75,7 +75,7 @@ export default function ProfileSetup() {
     <Sky>
       <main style={mainStyle}>
         <section style={panelStyle}>
-          <p style={eyebrowStyle}>starcharts</p>
+          <p style={eyebrowStyle}>Starcharts</p>
           <h1 style={headlineStyle}>What should we call you?</h1>
           <p style={subStyle}>This is how others in your group see you.</p>
 
