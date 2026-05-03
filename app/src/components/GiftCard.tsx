@@ -1,9 +1,9 @@
-// Bottom-sheet that opens when a star is tapped on the chart sky.
+// Modal dialog that opens when a star is tapped on the chart sky.
 //
 // Shows the gift's hero star, the honorees the giver was thinking of,
 // the reason text in serif, and a quiet footer with giver, count, and
-// formatted date. Backdrop or Escape closes it. Reduced motion skips
-// the slide and renders the sheet in place.
+// formatted date. Backdrop or Escape closes it. Scrolls internally if
+// content is taller than the viewport.
 
 import { useEffect } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -38,9 +38,15 @@ export function GiftCard({ gift, onClose }: GiftCardProps) {
   const dateLabel = dateFormatter.format(new Date(gift.createdAt));
   const countLabel = `${gift.count} ${gift.count === 1 ? "star" : "stars"}`;
 
-  const sheetInitial = prefersReducedMotion ? { y: 0, opacity: 0 } : { y: "100%" };
-  const sheetAnimate = prefersReducedMotion ? { y: 0, opacity: 1 } : { y: 0 };
-  const sheetExit = prefersReducedMotion ? { y: 0, opacity: 0 } : { y: "100%" };
+  const modalInitial = prefersReducedMotion
+    ? { opacity: 0 }
+    : { opacity: 0, scale: 0.94, y: 12 };
+  const modalAnimate = prefersReducedMotion
+    ? { opacity: 1 }
+    : { opacity: 1, scale: 1, y: 0 };
+  const modalExit = prefersReducedMotion
+    ? { opacity: 0 }
+    : { opacity: 0, scale: 0.94, y: 12 };
 
   return (
     <AnimatePresence>
@@ -55,32 +61,26 @@ export function GiftCard({ gift, onClose }: GiftCardProps) {
           key="backdrop"
           style={backdropStyle}
           initial={{ opacity: 0 }}
-          animate={{ opacity: 0.5 }}
+          animate={{ opacity: 0.6 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
           onClick={onClose}
         />
         <motion.div
-          key="sheet"
-          style={sheetStyle}
-          initial={sheetInitial}
-          animate={sheetAnimate}
-          exit={sheetExit}
+          key="modal"
+          style={modalStyle}
+          initial={modalInitial}
+          animate={modalAnimate}
+          exit={modalExit}
           transition={
             prefersReducedMotion
               ? { duration: 0.15 }
-              : { type: "spring", damping: 32, stiffness: 320 }
+              : { type: "spring", damping: 28, stiffness: 340 }
           }
         >
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            style={closeBtnStyle}
-          >
+          <button onClick={onClose} aria-label="Close" style={closeBtnStyle}>
             ✕
           </button>
-
-          <div style={handleBarStyle} aria-hidden />
 
           <div style={heroWrapStyle}>
             <img
@@ -94,7 +94,7 @@ export function GiftCard({ gift, onClose }: GiftCardProps) {
           <div style={eyebrowStyle}>for</div>
           <div style={honoreeStyle}>{honoreeLabel}</div>
 
-          <p style={reasonStyle}>“{gift.reason}”</p>
+          <p style={reasonStyle}>"{gift.reason}"</p>
 
           <div style={footerStyle}>
             from {giverName} · {countLabel} · {dateLabel}
@@ -109,9 +109,10 @@ const overlayStyle: React.CSSProperties = {
   position: "fixed",
   inset: 0,
   display: "flex",
-  alignItems: "flex-end",
+  alignItems: "center",
   justifyContent: "center",
   zIndex: 50,
+  padding: "16px",
   pointerEvents: "auto",
 };
 
@@ -121,19 +122,17 @@ const backdropStyle: React.CSSProperties = {
   background: "#000",
 };
 
-const sheetStyle: React.CSSProperties = {
+const modalStyle: React.CSSProperties = {
   position: "relative",
   width: "100%",
-  maxWidth: 480,
-  maxHeight: "90dvh",
+  maxWidth: 400,
+  maxHeight: "calc(100vh - 32px)",
   overflowY: "auto",
-  margin: "0 auto",
   background: "var(--sc-surface)",
   border: "1px solid var(--sc-stroke)",
-  borderBottom: "none",
-  borderRadius: "var(--sc-radius-tile, 18px) var(--sc-radius-tile, 18px) 0 0",
-  padding: "18px 24px 32px",
-  boxShadow: "var(--sc-shadow-tile, 0 -12px 40px rgba(0,0,0,0.45))",
+  borderRadius: "var(--sc-radius-tile, 18px)",
+  padding: "28px 24px 28px",
+  boxShadow: "0 24px 60px rgba(0,0,0,0.55)",
   backdropFilter: "blur(10px)",
   WebkitBackdropFilter: "blur(10px)",
   color: "var(--sc-fg)",
@@ -143,7 +142,7 @@ const sheetStyle: React.CSSProperties = {
 const closeBtnStyle: React.CSSProperties = {
   position: "absolute",
   top: 14,
-  right: 16,
+  right: 14,
   width: 28,
   height: 28,
   display: "flex",
@@ -157,14 +156,6 @@ const closeBtnStyle: React.CSSProperties = {
   lineHeight: 1,
   borderRadius: "50%",
   padding: 0,
-};
-
-const handleBarStyle: React.CSSProperties = {
-  width: 36,
-  height: 4,
-  borderRadius: 2,
-  background: "var(--sc-stroke)",
-  margin: "0 auto 14px",
 };
 
 const heroWrapStyle: React.CSSProperties = {
