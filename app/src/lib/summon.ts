@@ -8,7 +8,13 @@
 // surface that as a `RateLimitError` so SummonFlow can render a
 // calmer "the sky is full" message instead of the generic failure path.
 
-const DEFAULT_ENDPOINT = "https://summon.stars.realm.watch/api/summon";
+// Temporarily pointing at the workers.dev URL while the cert for
+// summon.stars.realm.watch reprovisions on the Cloudflare edge —
+// TLS handshake against the custom domain returned `alert
+// handshake failure (552)` from inside the LAN, while the same
+// Worker behind workers.dev served fine. Swap this back once the
+// custom-domain cert is healthy.
+const DEFAULT_ENDPOINT = "https://starcharts-summon.jp5.workers.dev/api/summon";
 
 export const SUMMON_ENDPOINT =
   (import.meta.env.VITE_SUMMON_ENDPOINT as string | undefined) ?? DEFAULT_ENDPOINT;
