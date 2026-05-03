@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sky } from "../components/Sky";
 import { LoadingSky } from "../components/LoadingSky";
@@ -8,6 +8,7 @@ import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useCurrentGroup } from "../hooks/useCurrentGroup";
 import { useChartsForGroup } from "../hooks/useChartsForGroup";
 import { signOut } from "../lib/auth";
+import { db } from "../db/client";
 
 const headerStyle: CSSProperties = {
   display: "flex",
@@ -82,6 +83,9 @@ export default function Dashboard() {
 
   const [copied, setCopied] = useState(false);
   const [createHover, setCreateHover] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   // Auth gate: not loading, no user → sign in.
   useEffect(() => {
@@ -126,6 +130,25 @@ export default function Dashboard() {
     navigate("/sign-in", { replace: true });
   };
 
+  const startEditingName = () => {
+    setNameInput(group.name);
+    setEditingName(true);
+    setTimeout(() => nameInputRef.current?.select(), 0);
+  };
+
+  const commitNameEdit = async () => {
+    const trimmed = nameInput.trim();
+    setEditingName(false);
+    if (trimmed && trimmed !== group.name) {
+      await db.transact(db.tx.groups[group.id].update({ name: trimmed }));
+    }
+  };
+
+  const cancelNameEdit = () => {
+    setEditingName(false);
+    setNameInput("");
+  };
+
   return (
     <div style={{ position: "absolute", inset: 0, color: "var(--sc-fg)", overflow: "hidden" }}>
       <Sky />
@@ -148,18 +171,51 @@ export default function Dashboard() {
         <header style={headerStyle}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ ...eyebrowStyle, color: "var(--sc-gold)" }}>your group</span>
-            <h1
-              style={{
-                margin: 0,
-                fontFamily: "var(--sc-serif)",
-                fontWeight: "var(--sc-serif-weight, 500)" as CSSProperties["fontWeight"],
-                fontSize: 26,
-                lineHeight: 1.1,
-                letterSpacing: "-0.005em",
-              }}
-            >
-              {group.name}
-            </h1>
+            {editingName ? (
+              <input
+                ref={nameInputRef}
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                onBlur={commitNameEdit}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitNameEdit();
+                  if (e.key === "Escape") cancelNameEdit();
+                }}
+                style={{
+                  margin: 0,
+                  fontFamily: "var(--sc-serif)",
+                  fontWeight: "var(--sc-serif-weight, 500)" as CSSProperties["fontWeight"],
+                  fontSize: 26,
+                  lineHeight: 1.1,
+                  letterSpacing: "-0.005em",
+                  background: "transparent",
+                  border: "none",
+                  borderBottom: "2px solid var(--sc-gold)",
+                  color: "var(--sc-fg)",
+                  outline: "none",
+                  padding: "0 2px",
+                  width: `${Math.max(nameInput.length, 4)}ch`,
+                  minWidth: 120,
+                  maxWidth: 400,
+                }}
+              />
+            ) : (
+              <h1
+                onClick={startEditingName}
+                title="Click to rename"
+                style={{
+                  margin: 0,
+                  fontFamily: "var(--sc-serif)",
+                  fontWeight: "var(--sc-serif-weight, 500)" as CSSProperties["fontWeight"],
+                  fontSize: 26,
+                  lineHeight: 1.1,
+                  letterSpacing: "-0.005em",
+                  cursor: "text",
+                }}
+              >
+                {group.name}
+              </h1>
+            )}
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
