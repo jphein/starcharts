@@ -574,6 +574,39 @@ through the model. The Worker only validates length and charset.
 
 ---
 
+## InstantDB permissions
+
+Source of truth: [`app/src/instant.perms.ts`](./app/src/instant.perms.ts).
+The actual rules are stored on InstantDB's servers; the file is a
+mirror that the CLI deploys.
+
+**Push local changes to production:**
+
+```sh
+cd app
+npx instant-cli push perms -a e526d9cf-e783-4a99-b3b3-a69730ecdd7e -y
+```
+
+**Pull current production rules into the repo:**
+
+```sh
+cd app
+npx instant-cli pull perms -a e526d9cf-e783-4a99-b3b3-a69730ecdd7e -y
+```
+
+Watch for diffs after pulling — anyone with admin access can edit
+rules via the InstantDB dashboard, so the file can drift.
+
+The current rule set only constrains `$users` (group-mates can see
+each other's display name + avatar; everyone else is hidden;
+updates locked to self). `groups`, `charts`, and `gifts` are
+permissive by default — fine for the v1 single-tenant model, but
+lock them down before any second tenant. Each entity needs `view`,
+`create`, `update`, `delete`, and link/unlink rules; see
+[InstantDB's permissions docs](https://www.instantdb.com/docs/permissions).
+
+---
+
 ## Magic-link email branding
 
 The InstantDB magic-code email is fully customized, but the **template
