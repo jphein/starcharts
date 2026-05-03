@@ -304,10 +304,14 @@ export default function SummonFlow() {
                   ? "your sky is full for today"
                   : "easy on the summons"}
               </p>
+              {/*
+                Body line comes from the Worker so the cap number stays
+                in sync with the server. The friendly headline above is
+                the SPA's framing; the description below is authoritative.
+              */}
+              <p style={errorDetailStyle}>{rateLimit.message}</p>
               <p style={errorDetailStyle}>
-                {rateLimit.scope === "group"
-                  ? `the group has reached today's custom-star limit. more space ${describeWait(rateLimit.retryAfterSeconds)}.`
-                  : `try again ${describeWait(rateLimit.retryAfterSeconds)}.`}
+                try again {describeWait(rateLimit.retryAfterSeconds)}.
               </p>
               <button
                 type="button"

@@ -112,7 +112,7 @@ async function handleSummon(request: Request, env: Env): Promise<Response> {
   // defense, since it keys off CF-Connecting-IP which the client can't
   // forge. If a serious abuser shows up, tightening the IP cap or putting
   // an auth-token check in front of this is the next move.
-  const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+  const ip = resolveClientIp(request);
   const limit = await checkAndBumpRateLimits(env, groupId, ip);
   if (limit.blocked) {
     const headers = new Headers({ "Content-Type": "application/json; charset=utf-8" });
@@ -218,27 +218,61 @@ interface BucketSpec {
   blockedMessage: string;
 }
 
-function rateLimitBuckets(groupId: string, ip: string, now: Date): BucketSpec[] {
+// Resolve the client IP for the per-IP bucket. Cloudflare always sets
+// `CF-Connecting-IP` for traffic that actually reached the edge, but
+// `wrangler dev` and some test/proxy setups don't, so we fall through
+// to the conventional proxy headers and finally return null. Callers
+// that get null skip the IP bucket entirely instead of mass-keying
+// unidentifiable requests under a single "unknown" string.
+function resolveClientIp(request: Request): string | null {
+  const cfip = request.headers.get("CF-Connecting-IP");
+  if (cfip && cfip.length > 0) return cfip;
+
+  const xff = request.headers.get("X-Forwarded-For");
+  if (xff) {
+    // X-Forwarded-For is a comma-separated chain; the first entry is the
+    // closest-to-origin client. Trim and validate it has *some* shape.
+    const first = xff.split(",")[0]?.trim();
+    if (first) return first;
+  }
+
+  const xreal = request.headers.get("X-Real-IP");
+  if (xreal && xreal.length > 0) return xreal;
+
+  return null;
+}
+
+function rateLimitBuckets(
+  groupId: string,
+  ip: string | null,
+  now: Date,
+): BucketSpec[] {
   const day = `${now.getUTCFullYear()}${pad2(now.getUTCMonth() + 1)}${pad2(now.getUTCDate())}`;
   const hour = `${day}${pad2(now.getUTCHours())}`;
-  return [
+  const buckets: BucketSpec[] = [
     {
       scope: "group",
       key: `g:${groupId}:${day}`,
       cap: GROUP_DAILY_CAP,
       ttlSeconds: SECONDS_IN_DAY + SECONDS_IN_HOUR,
       retryAfterSeconds: secondsUntilNextUtcDay(now),
-      blockedMessage: `your group's sky is full for today (${GROUP_DAILY_CAP} custom stars). more space tomorrow.`,
+      blockedMessage: `the group has reached today's custom-star limit (${GROUP_DAILY_CAP}).`,
     },
-    {
+  ];
+  // Only include the IP bucket when we actually know the client's IP.
+  // Otherwise unidentifiable requests would all share a single bucket
+  // and cap each other out — see PR #4 review.
+  if (ip) {
+    buckets.push({
       scope: "ip",
       key: `ip:${ip}:${hour}`,
       cap: IP_HOURLY_CAP,
       ttlSeconds: SECONDS_IN_HOUR + 300,
       retryAfterSeconds: secondsUntilNextUtcHour(now),
-      blockedMessage: "too many summons in the last hour from this device — try again shortly.",
-    },
-  ];
+      blockedMessage: `this device has summoned ${IP_HOURLY_CAP} stars in the last hour.`,
+    });
+  }
+  return buckets;
 }
 
 // Combined check + bump: read each bucket, refuse on cap, otherwise
@@ -260,7 +294,7 @@ function rateLimitBuckets(groupId: string, ip: string, now: Date): BucketSpec[] 
 async function checkAndBumpRateLimits(
   env: Env,
   groupId: string,
-  ip: string,
+  ip: string | null,
 ): Promise<RateLimitDecision> {
   const kv = env.RATE_LIMIT_KV;
   if (!kv || typeof kv.get !== "function") {
@@ -274,28 +308,34 @@ async function checkAndBumpRateLimits(
 
   const buckets = rateLimitBuckets(groupId, ip, new Date());
 
-  // First pass: refuse if any bucket is already at cap. Then bump
-  // every bucket (including the one we wouldn't have hit at cap)
-  // so the daily/hourly history stays accurate.
-  for (const b of buckets) {
-    const current = await readCount(kv, b.key);
-    if (current >= b.cap) {
+  // Single pass: read each bucket once (in parallel), refuse on cap,
+  // otherwise bump every bucket using the count we already have. This
+  // halves the KV reads vs. a separate check-then-bump and skips a
+  // duplicate read+write when blocked.
+  //
+  // Atomicity: KV doesn't have atomic counters, so a concurrent burst
+  // of N requests near the cap can all see the same pre-bump count
+  // and pass through — we accept a small overshoot rather than spending
+  // a Durable Object on this. Caps are sized with that slack in mind.
+  const counts = await Promise.all(
+    buckets.map((b) => readCount(kv, b.key)),
+  );
+
+  for (let i = 0; i < buckets.length; i++) {
+    if (counts[i] >= buckets[i].cap) {
       return {
         blocked: true,
-        scope: b.scope,
-        retryAfterSeconds: b.retryAfterSeconds,
-        message: b.blockedMessage,
+        scope: buckets[i].scope,
+        retryAfterSeconds: buckets[i].retryAfterSeconds,
+        message: buckets[i].blockedMessage,
       };
     }
   }
 
   await Promise.all(
-    buckets.map(async (b) => {
-      const current = await readCount(kv, b.key);
-      await kv.put(b.key, String(current + 1), {
-        expirationTtl: b.ttlSeconds,
-      });
-    }),
+    buckets.map((b, i) =>
+      kv.put(b.key, String(counts[i] + 1), { expirationTtl: b.ttlSeconds }),
+    ),
   );
 
   return { blocked: false, retryAfterSeconds: 0, message: "" };
