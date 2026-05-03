@@ -23,8 +23,11 @@
 //                charts and gifts in any group. New rules:
 //                  - groups: any authed user can create a group;
 //                    any member can rename their own group; nobody
-//                    can delete via the client. View is open to
-//                    any authed user (see "Known gap" below).
+//                    can delete via the client. View was kept open
+//                    to authed users so the join-by-invite-code
+//                    flow could resolve a code → groupId; closed
+//                    to members-only later (see 2026-05-03 entry
+//                    below).
 //                  - charts: only members of the chart's group can
 //                    view, create, or update; charts can't be
 //                    deleted from the client (per v1 design —
@@ -33,16 +36,13 @@
 //                    view or create; gifts are immutable
 //                    (update = delete = false).
 //
-// Known gap: groups.view is intentionally permissive to keep the
-// join-by-invite-code flow working. `GroupSetup.handleJoin` does a
-// `queryOnce({ groups: { where: { inviteCode } } })` lookup; if the
-// view rule were members-only, that query would return empty for a
-// non-member and joining would be impossible. The cost: an authed
-// visitor can iterate groups and harvest invite codes. The fix is
-// a Worker-side `POST /api/join-group` endpoint that does the
-// inviteCode lookup with an admin token and returns only the
-// groupId, allowing groups.view to be locked to members. Tracked
-// as the next perms task.
+//   2026-05-03 — closed groups.view to members-only. Now that the
+//                Cloudflare Worker exposes `POST /api/join-group`
+//                (admin-token-backed inviteCode → groupId lookup),
+//                the SPA's `GroupSetup.handleJoin` no longer needs
+//                direct read access to `groups`. Closing this rule
+//                is what makes group enumeration impractical from
+//                the public app.
 
 import type { InstantRules } from "@instantdb/react";
 
@@ -74,11 +74,14 @@ const rules = {
 
   groups: {
     allow: {
-      // See "Known gap" in the file header. Permissive view keeps
-      // the invite-code lookup in `GroupSetup.handleJoin` working;
-      // gives up enumeration resistance. Replace with members-only
-      // once a Worker-side join endpoint exists.
-      view: "auth.id != null",
+      // Members-only. Non-members never need to read `groups`
+      // directly — the SPA's join-by-code path goes through the
+      // Cloudflare Worker's `/api/join-group` endpoint, which
+      // does the inviteCode lookup with the InstantDB admin
+      // token and returns just the group id + name. Closing
+      // direct read here is what makes group enumeration
+      // impractical from the public app.
+      view: "auth.id != null && auth.id in data.ref('members.id')",
 
       // Any authed user can create a group. We *intend* the same
       // transact to link the creator as the first member — but we
