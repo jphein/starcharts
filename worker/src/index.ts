@@ -53,9 +53,17 @@ const INSTANT_APP_ID = "e526d9cf-e783-4a99-b3b3-a69730ecdd7e";
 // confusable I/O/0/1). Mirror of `app/src/lib/inviteCode.ts`.
 const INVITE_CODE_RE = /^[A-Z2-9]{6}$/;
 
-// Per-IP cap on join-group lookups: brute-forcing a single invite
-// code (32^6 ≈ 1B combinations) is impractical with this in place.
-const IP_JOIN_HOURLY_CAP = 20;
+// Per-IP cap on join-group lookups, sized for "small enough that
+// even concurrent-burst racing doesn't dent the keyspace." Cloudflare
+// KV doesn't have atomic counters; an attacker bursting concurrent
+// requests can race the read-then-write and get all of them past the
+// check before any write lands. With a 10/hour intended cap, a
+// realistic burst doubles or quadruples it (≤ 40/hour). Against a
+// 32^6 ≈ 1B keyspace that's still ~3,000 years per IP for full
+// brute-force; combined with Cloudflare's edge DDoS clamping, the
+// race is acceptable for v1. A truly atomic counter would need a
+// Durable Object — tracked as a follow-up.
+const IP_JOIN_HOURLY_CAP = 10;
 
 const ALLOWED_ORIGINS = new Set([
   "https://stars.realm.watch",
@@ -462,9 +470,18 @@ async function handleJoinGroup(
     return json({ error: "inviteCode must be 6 characters from A–Z, 2–9" }, 400);
   }
 
-  // Per-IP rate limit on lookup attempts. Separate bucket from the
-  // summon caps. Skipped silently if KV isn't provisioned (matches
-  // the rest of the Worker's defensive style).
+  // Per-IP rate limit on lookup attempts. Skipped silently if KV
+  // isn't provisioned (matches the rest of the Worker's defensive
+  // style). Bump *before* the cap check so a bursting attacker
+  // can't slip through with stale-read concurrency: each request
+  // increments first, then decides. There's still a small race
+  // (KV puts aren't atomic) but the bump-first ordering shifts
+  // worst-case from "all N concurrent requests pass" to "the
+  // counter is at-least-correct after the storm settles, and
+  // subsequent requests block immediately." The cap is sized
+  // small enough (`IP_JOIN_HOURLY_CAP = 10`) that even doubled or
+  // quadrupled by burst racing it's still 5,500+ years to
+  // brute-force the 32^6 keyspace per IP.
   const ip = resolveClientIp(request);
   if (env.RATE_LIMIT_KV && ip) {
     const now = new Date();
@@ -473,6 +490,9 @@ async function handleJoinGroup(
     )}${pad2(now.getUTCHours())}`;
     const key = `ipjoin:${ip}:${hour}`;
     const current = await readCount(env.RATE_LIMIT_KV, key);
+    await env.RATE_LIMIT_KV.put(key, String(current + 1), {
+      expirationTtl: SECONDS_IN_HOUR + 300,
+    });
     if (current >= IP_JOIN_HOURLY_CAP) {
       const headers = new Headers({
         "Content-Type": "application/json; charset=utf-8",
@@ -486,11 +506,6 @@ async function handleJoinGroup(
         { status: 429, headers },
       );
     }
-    // Bump up front; failed lookups still count against the cap so
-    // a probe loop can't run free.
-    await env.RATE_LIMIT_KV.put(key, String(current + 1), {
-      expirationTtl: SECONDS_IN_HOUR + 300,
-    });
   }
 
   // Admin query against InstantDB. The endpoint accepts InstaQL
@@ -519,24 +534,27 @@ async function handleJoinGroup(
       },
     );
   } catch (err) {
-    return json(
-      { error: "couldn't reach the directory", detail: String(err) },
-      502,
-    );
+    // Log internally; the public response stays generic so we
+    // don't leak admin-API error shape to anonymous callers
+    // probing the endpoint.
+    console.error("join-group: admin fetch threw", err);
+    return json({ error: "couldn't reach the directory" }, 502);
   }
 
   if (!upstream.ok) {
     const detail = await safeText(upstream);
-    return json(
-      { error: "directory lookup failed", status: upstream.status, detail },
-      502,
+    console.error(
+      `join-group: admin returned ${upstream.status}`,
+      detail.slice(0, 500),
     );
+    return json({ error: "directory lookup failed" }, 502);
   }
 
   let payload: unknown;
   try {
     payload = await upstream.json();
-  } catch {
+  } catch (err) {
+    console.error("join-group: admin returned non-JSON", err);
     return json({ error: "directory returned non-JSON" }, 502);
   }
 

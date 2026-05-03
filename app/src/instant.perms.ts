@@ -148,19 +148,28 @@ const rules = {
       create: "auth.id != null",
 
       // Members can update — but only the `completedAt` field is
-      // mutable. The rest of a chart (name, goalCount, reward,
-      // createdAt) is set at creation and stays put. This uses
-      // `request.modifiedFields.all(...)` so a partial-update
-      // transact works cleanly: the only path the SPA uses is the
-      // goal-reached write `update({completedAt: now})`, which
-      // sets `modifiedFields = ['completedAt']` and passes the
-      // quantifier. An attempt to retroactively change `goalCount`
-      // would fail because that field would also appear in
-      // `modifiedFields`.
+      // mutable, and only as a one-way transition from null to a
+      // timestamp. The rest of a chart (name, goalCount, reward,
+      // createdAt) is set at creation and stays put.
+      //
+      // Three constraints:
+      //   1. `request.modifiedFields.all(field, field == 'completedAt')`
+      //      — only `completedAt` may appear in this update.
+      //   2. `data.completedAt == null` — the chart must currently
+      //      be incomplete. Once stamped, it can't be re-stamped or
+      //      cleared. This prevents toggle-loops that would retrigger
+      //      the celebrate scene + memory transition.
+      //   3. `newData.completedAt != null` — the new value must be
+      //      a real timestamp (no "uncomplete" via writing null).
+      //
+      // Per the design brief, completed charts become memories,
+      // not editable artifacts.
       update:
         "auth.id != null && " +
         "auth.id in data.ref('group.members.id') && " +
-        "request.modifiedFields.all(field, field == 'completedAt')",
+        "request.modifiedFields.all(field, field == 'completedAt') && " +
+        "data.completedAt == null && " +
+        "newData.completedAt != null",
 
       // Charts are not deletable in v1 — completed charts become
       // memories per the design brief.
