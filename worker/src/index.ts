@@ -54,15 +54,27 @@ const INSTANT_APP_ID = "e526d9cf-e783-4a99-b3b3-a69730ecdd7e";
 const INVITE_CODE_RE = /^[A-Z2-9]{6}$/;
 
 // Per-IP cap on join-group lookups, sized for "small enough that
-// even concurrent-burst racing doesn't dent the keyspace." Cloudflare
-// KV doesn't have atomic counters; an attacker bursting concurrent
-// requests can race the read-then-write and get all of them past the
-// check before any write lands. With a 10/hour intended cap, a
-// realistic burst doubles or quadruples it (≤ 40/hour). Against a
-// 32^6 ≈ 1B keyspace that's still ~3,000 years per IP for full
-// brute-force; combined with Cloudflare's edge DDoS clamping, the
-// race is acceptable for v1. A truly atomic counter would need a
-// Durable Object — tracked as a follow-up.
+// even concurrent-burst racing doesn't dent the keyspace."
+//
+// Cloudflare KV is non-atomic and eventually-consistent. Two
+// concrete races bite this counter:
+//   1. Stale reads — concurrent requests can all observe the same
+//      pre-bump `current` and pass the cap check together.
+//   2. Lost updates — concurrent `put(current+1)` writes from the
+//      same `current` collapse to one increment, so the counter
+//      undercounts the actual request volume.
+// Net effect: a bursting attacker can punch through the cap by
+// some multiple before the next bucket. We accept this for v1
+// because (a) the cap is small enough that even a 100× burst is
+// only 1,000 lookups/hour, and (b) Cloudflare's edge DDoS clamps
+// concurrent connections per IP at roughly that range anyway.
+//
+// Brute-force math: 32^6 ≈ 1.07B invite-code keyspace. At a
+// realistic ceiling of 100/hour per IP (10× the configured cap),
+// full enumeration takes ~1,200 years per IP. Adequate.
+//
+// A genuinely atomic counter would need a Durable Object —
+// tracked as a follow-up.
 const IP_JOIN_HOURLY_CAP = 10;
 
 const ALLOWED_ORIGINS = new Set([
@@ -472,16 +484,15 @@ async function handleJoinGroup(
 
   // Per-IP rate limit on lookup attempts. Skipped silently if KV
   // isn't provisioned (matches the rest of the Worker's defensive
-  // style). Bump *before* the cap check so a bursting attacker
-  // can't slip through with stale-read concurrency: each request
-  // increments first, then decides. There's still a small race
-  // (KV puts aren't atomic) but the bump-first ordering shifts
-  // worst-case from "all N concurrent requests pass" to "the
-  // counter is at-least-correct after the storm settles, and
-  // subsequent requests block immediately." The cap is sized
-  // small enough (`IP_JOIN_HOURLY_CAP = 10`) that even doubled or
-  // quadrupled by burst racing it's still 5,500+ years to
-  // brute-force the 32^6 keyspace per IP.
+  // style).
+  //
+  // We check first, write second — and *don't* write when over cap.
+  // Writing on every request (including blocked ones) would let an
+  // attacker amplify our KV write volume after they've already hit
+  // the cap, which costs more than it buys. The cost is the
+  // stale-read race documented at IP_JOIN_HOURLY_CAP: a concurrent
+  // burst can slip through together. The brute-force math up there
+  // already accounts for that worst case.
   const ip = resolveClientIp(request);
   if (env.RATE_LIMIT_KV && ip) {
     const now = new Date();
@@ -490,9 +501,6 @@ async function handleJoinGroup(
     )}${pad2(now.getUTCHours())}`;
     const key = `ipjoin:${ip}:${hour}`;
     const current = await readCount(env.RATE_LIMIT_KV, key);
-    await env.RATE_LIMIT_KV.put(key, String(current + 1), {
-      expirationTtl: SECONDS_IN_HOUR + 300,
-    });
     if (current >= IP_JOIN_HOURLY_CAP) {
       const headers = new Headers({
         "Content-Type": "application/json; charset=utf-8",
@@ -506,6 +514,13 @@ async function handleJoinGroup(
         { status: 429, headers },
       );
     }
+    // Bump only when the request is going through. Failed lookups
+    // (404s after this point) still count against the cap because
+    // they got past this gate — a probe loop pays for every attempt
+    // that doesn't hit the cap.
+    await env.RATE_LIMIT_KV.put(key, String(current + 1), {
+      expirationTtl: SECONDS_IN_HOUR + 300,
+    });
   }
 
   // Admin query against InstantDB. The endpoint accepts InstaQL
