@@ -9,6 +9,7 @@ import { useEffect, useMemo, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Sky } from "../components/Sky";
+import { LoadingSky } from "../components/LoadingSky";
 import { Star } from "../components/Star";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useCurrentGroup } from "../hooks/useCurrentGroup";
@@ -96,11 +97,7 @@ export default function GoalReached() {
     chartLoading ||
     !chart
   ) {
-    return (
-      <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
-        <Sky />
-      </div>
-    );
+    return <LoadingSky />;
   }
 
   return (

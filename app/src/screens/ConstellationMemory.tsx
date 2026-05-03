@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { Sky } from "../components/Sky";
+import { LoadingSky } from "../components/LoadingSky";
 import { Star } from "../components/Star";
 import { GiftCard } from "../components/GiftCard";
 import { PresencePanel } from "../components/PresencePanel";
@@ -86,11 +87,7 @@ export default function ConstellationMemory() {
     chartLoading ||
     !chart
   ) {
-    return (
-      <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
-        <Sky />
-      </div>
-    );
+    return <LoadingSky />;
   }
 
   return (

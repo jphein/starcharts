@@ -1,0 +1,42 @@
+/* Loading-state hint, scoped to LoadingSky.
+ *
+ * The `.text` opacity stays at 0 for the first 350ms so a fast-resolving
+ * load reads as a clean flash of starfield, not a flicker of text. After
+ * that it fades in over ~1.2s.
+ *
+ * Reduced-motion: skip the animation entirely and render the text at full
+ * opacity from the start. Matches the project-wide motion policy already
+ * applied in Sky.module.css and the framer-motion useReducedMotion hooks.
+ */
+
+.hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.text {
+  margin: 0;
+  font-family: var(--sc-serif);
+  font-style: italic;
+  color: var(--sc-fg-muted);
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+  opacity: 0;
+  animation: scLoadingHint 1200ms ease-out 350ms forwards;
+}
+
+@keyframes scLoadingHint {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .text {
+    opacity: 1;
+    animation: none;
+    transform: none;
+  }
+}

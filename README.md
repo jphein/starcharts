@@ -49,10 +49,13 @@ whole thing should feel handcrafted, never template-y.
 
 ## ✦ Two ways to summon a star
 
-**Preset stars** — a curated gallery of art-directed star families: gold
-sparkle, ruby twinkle, amethyst nebula, copper ember, dragon fire, moon pearl,
-aurora ribbon. Distinctive at a glance, even at thumbnail size. Free to give,
-abundant by design.
+**Preset stars** — a curated gallery of fourteen art-directed star families:
+gold sparkle, ruby twinkle, amethyst nebula, silver crescent, aurora ribbon,
+pearl shimmer, comet trail, supernova bloom, emerald glint, copper ember,
+frost crystal, cosmic rose, rainbow burst, dragon fire. Distinctive at a
+glance, even at thumbnail size. Free to give, abundant by design. (See
+`app/src/lib/presets.ts` for the canonical order; assets live under
+`assets/stars/` and ship as `app/public/stars/<slug>.png`.)
 
 **Custom stars** — type a single line of poetry like *"a star made of fireflies
 and starlight"*, press **Summon**, and the app calls Azure AI Foundry's
@@ -125,8 +128,10 @@ starcharts/
   Azure, stores the PNG in R2, returns a public URL. Never exposes the API
   key to the browser.
 - **Versioning:** `app/scripts/version.mjs` writes `/version.json` at build
-  using [`realm-sigil`](https://github.com/jphein/realm-sigil) (realm word:
-  `stellar`).
+  with git metadata (hash, branch, dirty, built). Realm word is `stellar`,
+  per the project-wide [`realm-sigil`](https://github.com/jphein/realm-sigil)
+  convention; the script bakes the fields itself rather than importing the
+  library, so there's no runtime dependency to add.
 
 ---
 
@@ -165,12 +170,12 @@ Then point the SPA at it:
 VITE_SUMMON_ENDPOINT=http://localhost:8787/api/summon
 ```
 
-The dev server hot-reloads. Hit **Summon** in `/give` and watch
-`worker/src/index.ts` log the round-trip.
+The dev server hot-reloads. Open a chart, hit **Summon** in
+`/charts/:id/give`, and watch `worker/src/index.ts` log the round-trip.
 
 ---
 
-## ✦ The seven scenes
+## ✦ The ten scenes
 
 These are the moments the design must nail. Each lives in its own file —
 follow the trail if you want to see how a feeling got built.
@@ -192,27 +197,38 @@ follow the trail if you want to see how a feeling got built.
 
 ## ✦ Data shape
 
-Six tables, no traditional backend:
+Four entities, five named links — relationships are modeled as InstantDB
+links rather than foreign-key columns, so queries traverse them with dotted
+paths like `where: { "group.id": groupId }`. See `app/src/db/schema.ts` for
+the source of truth.
 
 ```
-users          { id, email, displayName, avatarSeed }
-groups         { id, name, createdAt }
-groupMembers   ─── link table ─── group ↔ user
-charts         { id, groupId, name, goalCount, reward,
+$users         { id, email, displayName, avatarSeed }
+groups         { id, name, inviteCode, createdAt }
+charts         { id, name, goalCount, reward,
                  createdAt, completedAt? }
-gifts          { id, chartId, giverId, reason, count, style,
-                 customImageUrl?, createdAt }
-giftHonorees   ─── link table ─── gift ↔ user
+gifts          { id, reason, count, style,
+                 starImageUrl, x, y, createdAt }
+
+groupMembers   ─── link ─── groups.members  ↔ $users.groups
+chartGroup     ─── link ─── charts.group    ↔ groups.charts
+giftChart      ─── link ─── gifts.chart     ↔ charts.gifts
+giftGiver      ─── link ─── gifts.giver     ↔ $users.given
+giftHonorees   ─── link ─── gifts.honorees  ↔ $users.received
 ```
 
 A **gift** of `count: N` renders as a *cluster* of `N` stars: same artwork,
-hand-feeling positions. Cluster variety comes from spatial arrangement, never
-from per-star variance.
+hand-feeling positions. The `(x, y)` on a gift is the cluster's anchor
+point in normalized 0–1 sky coordinates; the per-star offsets are derived
+from a stable seed at render time. `starImageUrl` is the resolved sprite
+source — a `/stars/<slug>.png` for preset gifts, or an R2 URL minted by
+the Worker for custom-style gifts (`style === "custom"`). Cluster variety
+comes from spatial arrangement, never from per-star variance.
 
 A chart's `completedAt` flips when the sum of its gifts' `count` values
 crosses `goalCount`. From that moment, every member's client routes to
-`/celebrate`, and afterwards to `/memory`. Past charts are never deleted —
-they keep their shape forever.
+`/charts/:id/celebrate`, and afterwards to `/charts/:id/memory`. Past
+charts are never deleted — they keep their shape forever.
 
 ---
 
