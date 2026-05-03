@@ -80,13 +80,28 @@ const rules = {
       // once a Worker-side join endpoint exists.
       view: "auth.id != null",
 
-      // Anyone authed can create a group. The same transact links
-      // the creator as the first member.
+      // Any authed user can create a group. We *intend* the same
+      // transact to link the creator as the first member — but we
+      // can't enforce that at create time via the rule, since
+      // `newData.ref()` doesn't resolve link targets being set in
+      // the same transact (same constraint as charts/gifts.create).
+      // Realistic mitigation is the same as elsewhere: any group
+      // created without a member link is invisible to everyone via
+      // the read paths that depend on membership. A Worker-side
+      // write proxy with admin auth would close this for real.
       create: "auth.id != null",
 
-      // Members can rename / edit their group (used by the
-      // inline-edit affordance on Dashboard).
-      update: "auth.id != null && auth.id in data.ref('members.id')",
+      // Members can rename their group, but inviteCode and
+      // createdAt are immutable after creation. Without the
+      // equality clauses below, any member could rotate the invite
+      // code (breaking the join flow for everyone else) or rewrite
+      // the group's birthday. Lock both fields by requiring the
+      // proposed value to equal the current value.
+      update:
+        "auth.id != null && " +
+        "auth.id in data.ref('members.id') && " +
+        "newData.inviteCode == data.inviteCode && " +
+        "newData.createdAt == data.createdAt",
 
       // No client-side group deletion in v1.
       delete: "false",
@@ -112,8 +127,16 @@ const rules = {
       // immediately after creation.
       create: "auth.id != null",
 
-      // Members can update — used by `chart.completedAt` write
-      // when a gift hits the goal.
+      // Members can update. Tried locking everything except
+      // `completedAt` via `newData.X == data.X` clauses, but the
+      // goal-reached transact (chart.update with only completedAt
+      // set) failed against those equality checks — InstantDB's
+      // `newData` for a partial update may not echo back the
+      // unchanged fields the way the rule expected. Reverted to
+      // simple membership-only until the partial-update semantics
+      // are nailed down. Tighter immutability of name/goalCount/
+      // reward/createdAt belongs in a Worker write proxy or in a
+      // link-rule pattern.
       update: "auth.id != null && auth.id in data.ref('group.members.id')",
 
       // Charts are not deletable in v1 — completed charts become

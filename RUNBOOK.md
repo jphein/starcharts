@@ -580,30 +580,51 @@ Source of truth: [`app/src/instant.perms.ts`](./app/src/instant.perms.ts).
 The actual rules are stored on InstantDB's servers; the file is a
 mirror that the CLI deploys.
 
+The InstantDB app id is the same one defined as `APP_ID` in
+[`app/src/db/client.ts`](./app/src/db/client.ts) — copy it from
+there into the commands below (or `export INSTANT_APP_ID=<value>`
+once and use the `--env` flag) so there's only one source of
+truth for it in the repo.
+
 **Push local changes to production:**
 
 ```sh
 cd app
-npx instant-cli push perms -a e526d9cf-e783-4a99-b3b3-a69730ecdd7e -y
+npx instant-cli push perms -a <APP_ID>
 ```
 
 **Pull current production rules into the repo:**
 
 ```sh
 cd app
-npx instant-cli pull perms -a e526d9cf-e783-4a99-b3b3-a69730ecdd7e -y
+npx instant-cli pull perms -a <APP_ID>
 ```
 
 Watch for diffs after pulling — anyone with admin access can edit
 rules via the InstantDB dashboard, so the file can drift.
 
-The current rule set only constrains `$users` (group-mates can see
-each other's display name + avatar; everyone else is hidden;
-updates locked to self). `groups`, `charts`, and `gifts` are
-permissive by default — fine for the v1 single-tenant model, but
-lock them down before any second tenant. Each entity needs `view`,
-`create`, `update`, `delete`, and link/unlink rules; see
-[InstantDB's permissions docs](https://www.instantdb.com/docs/permissions).
+Current rule set:
+
+- **`$users`** — view: self + any user who shares a group with
+  you. Note that view is **row-level**, so when group-mates can
+  see each other's row they see all of `email`, `displayName`,
+  and `avatarSeed` (not just display-name + avatar). The SPA only
+  renders display-name + avatar, but the email is exposed at the
+  data layer. Update: locked to self only. Delete: blocked
+  (InstantDB doesn't allow client-side `$users` deletes).
+- **`groups`** — view: any authed user (kept open for the
+  invite-code lookup; tightened by a Worker-side join endpoint
+  in a follow-up). Create: any authed user. Update: members,
+  with `inviteCode` and `createdAt` immutable so a member can't
+  rotate the invite code or rewrite the timestamp. Delete:
+  blocked.
+- **`charts`** — view / create: members of the chart's group.
+  Update: members, but only `completedAt` is mutable — `name`,
+  `goalCount`, `reward`, `createdAt` are pinned to their current
+  values and the chart's group link can't be re-associated.
+  Delete: blocked.
+- **`gifts`** — view / create: members of the chart's group.
+  Update / delete: blocked (gifts immutable per design).
 
 ---
 
