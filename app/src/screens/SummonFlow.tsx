@@ -17,9 +17,31 @@ import { LoadingSky } from "../components/LoadingSky";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useCurrentGroup } from "../hooks/useCurrentGroup";
 import { useChart } from "../hooks/useChart";
-import { summonStar } from "../lib/summon";
+import { summonStar, RateLimitError } from "../lib/summon";
 
-type Phase = "input" | "forming" | "preview" | "error";
+type Phase = "input" | "forming" | "preview" | "error" | "rate-limited";
+
+interface RateLimitState {
+  scope: "group" | "ip";
+  retryAfterSeconds: number;
+  message: string;
+}
+
+// Round retry-after into a humane "in about 27 minutes" / "tomorrow"
+// rather than a clinical countdown.
+function describeWait(seconds: number): string {
+  if (seconds < 60) return "in less than a minute";
+  if (seconds < 3600) {
+    const m = Math.round(seconds / 60);
+    return m === 1 ? "in about a minute" : `in about ${m} minutes`;
+  }
+  if (seconds < 7200) return "in about an hour";
+  if (seconds < 86_400) {
+    const h = Math.round(seconds / 3600);
+    return `in about ${h} hours`;
+  }
+  return "tomorrow";
+}
 
 const PROMPT_MAX = 200;
 
@@ -40,6 +62,7 @@ export default function SummonFlow() {
   const [prompt, setPrompt] = useState("");
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [rateLimit, setRateLimit] = useState<RateLimitState | null>(null);
 
   // Auth gate.
   useEffect(() => {
@@ -83,13 +106,24 @@ export default function SummonFlow() {
   const trimmedPrompt = prompt.trim();
 
   async function runSummon(p: string) {
+    if (!group) return; // gate above guarantees this, but TS narrowing wants it
     setPhase("forming");
     setErrorMessage(null);
+    setRateLimit(null);
     try {
-      const { url } = await summonStar(p);
+      const { url } = await summonStar({ prompt: p, groupId: group.id });
       setResultUrl(url);
       setPhase("preview");
     } catch (err) {
+      if (err instanceof RateLimitError) {
+        setRateLimit({
+          scope: err.scope,
+          retryAfterSeconds: err.retryAfterSeconds,
+          message: err.message,
+        });
+        setPhase("rate-limited");
+        return;
+      }
       const message = err instanceof Error ? err.message : "Unknown error.";
       setErrorMessage(message);
       setPhase("error");
@@ -135,7 +169,7 @@ export default function SummonFlow() {
     <Sky>
       <main style={mainStyle}>
         <section style={panelStyle}>
-          <p style={eyebrowStyle}>starcharts</p>
+          <p style={eyebrowStyle}>Starcharts</p>
           <h1 style={headlineStyle}>Summon a custom star.</h1>
           <p style={subStyle}>
             One-of-a-kind. Describe it in a few words and let it form.
@@ -259,6 +293,37 @@ export default function SummonFlow() {
                 style={primaryButtonStyle(false, false)}
               >
                 Try again
+              </button>
+            </div>
+          )}
+
+          {phase === "rate-limited" && rateLimit && (
+            <div style={errorWrapStyle}>
+              <p style={errorHeadlineStyle}>
+                {rateLimit.scope === "group"
+                  ? "your sky is full for today"
+                  : "easy on the summons"}
+              </p>
+              <p style={errorDetailStyle}>
+                {rateLimit.scope === "group"
+                  ? `the group has reached today's custom-star limit. more space ${describeWait(rateLimit.retryAfterSeconds)}.`
+                  : `try again ${describeWait(rateLimit.retryAfterSeconds)}.`}
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(`/charts/${chartId}/give`)
+                }
+                style={primaryButtonStyle(false, false)}
+              >
+                Pick a preset instead
+              </button>
+              <button
+                type="button"
+                onClick={handleDifferentPrompt}
+                style={backLinkStyle}
+              >
+                back
               </button>
             </div>
           )}
