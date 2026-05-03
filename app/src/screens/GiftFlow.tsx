@@ -266,7 +266,7 @@ export default function GiftFlow() {
     <Sky>
       <main style={mainStyle}>
         <section style={panelStyle}>
-          <p style={eyebrowStyle}>starcharts</p>
+          <p style={eyebrowStyle}>Starcharts</p>
           <h1 style={headlineStyle}>{headline}</h1>
           <p style={subStyle}>{sub}</p>
 

@@ -275,10 +275,16 @@ The non-negotiables, copied forward from the design brief:
 
 A handful of intentional shortcuts are listed in
 [`RUNBOOK.md` → Known limitations](./RUNBOOK.md#known-limitations-v1):
-unindexed `createdAt`, no per-IP Worker rate limit, single-tenant InstantDB
-app id, HashRouter (so OG-image scrapers see only the index `<head>`),
-best-effort presence, immutable gifts, unbranded magic-link mail. Each one
-has a documented migration path for when scale or polish demands it.
+unindexed `createdAt`, single-tenant InstantDB app id, best-effort
+presence, immutable gifts, magic-link mail still via InstantDB's
+locked template (only the app name + sender display-name are
+brandable from their dashboard). Each one has a documented
+migration path for when scale or polish demands it.
+
+Custom-star summons are rate-limited at the Cloudflare Worker —
+**10/group/day, 30/IP/hour** — to keep Azure spend bounded. See
+[RUNBOOK → Summon rate-limits](./RUNBOOK.md#summon-rate-limits)
+for the constants and how to bump them.
 
 ---
 

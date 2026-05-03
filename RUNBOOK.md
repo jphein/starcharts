@@ -502,26 +502,25 @@ These are intentional shortcuts to ship; revisit at scale.
   thousands per chart this gets noticeable. Migration: add
   `.indexed()` in the InstantDB schema, switch the hook to a sorted
   query.
-- **Worker has no per-IP rate limit.** A motivated abuser can burn
-  Azure budget. Mitigation when this matters: a Cloudflare KV-backed
-  limiter (e.g. cap at 5 summons/minute per IP, 30/day per IP). Add
-  before any public posting of the URL.
-- **Magic-link emails go through InstantDB unbranded.** No way to
-  customise sender or template in v1. If you need branded mail, swap
-  to a custom magic-link flow and send via your own SMTP/Resend.
-- **No image moderation on summons.** `worker/src/index.ts` validates
-  prompt length but doesn't filter for unsafe content. Azure's own
-  content filter catches the obvious cases. For public posting,
-  consider adding a moderation pre-pass (OpenAI moderation API or
-  Azure Content Safety).
+- **Magic-link emails go through InstantDB unbranded.** Subject is
+  `{code} is your verification code for {appName}`, sender is
+  `verify@auth-pm.instantdb.com` — both locked. Closest we get to
+  "branded" without leaving InstantDB is the dashboard knobs:
+  - App name (drives subject + body): set to `Starcharts`
+    (capitalized) in [InstantDB dashboard](https://instantdb.com/dash) →
+    *Apps → starcharts → Settings → Display name*.
+  - Sender display name (the friendly name on `From:`): same dashboard,
+    *Auth → Magic link → From name* if available on the current plan.
+  Anything beyond that needs a custom magic-link flow + own SMTP.
 - **R2 served via the Worker by default.** Each image fetch goes
   through your Worker invocation budget if `PUBLIC_BUCKET_URL` isn't
   set. Configure R2 public access for free public delivery.
-- **HashRouter.** Deep links use `#/foo` rather than `/foo`. This is
-  fine for sharing inside the app but unfriendly to OG-image scrapers
-  (which see only the index `<head>`). If we ever care about social
-  previews, switch to BrowserRouter and lean on the existing
-  `app/public/404.html` SPA fallback.
+- **HashRouter.** Deep links use `#/foo` rather than `/foo`. Social
+  scrapers see only the index `<head>`, which is fine because we
+  populate static `og:*` / `twitter:*` tags there
+  (see `app/index.html` + `app/public/og.png`). If we ever want
+  per-chart previews, switch to BrowserRouter and lean on the
+  existing `app/public/404.html` SPA fallback.
 - **Presence is best-effort.** InstantDB presence shows who's
   *connected* to the chart room; it does not survive page reloads or
   app backgrounding cleanly on mobile. Reasonable for a "who's
@@ -533,15 +532,40 @@ These are intentional shortcuts to ship; revisit at scale.
 - **Single-tenant InstantDB app.** The InstantDB app id is hardcoded
   in `app/src/db/client.ts`. Fine for one production deploy. For
   staging/preview environments, factor it to an env var.
-- **Profile-setup auto-redirect not wired.** The `/profile-setup`
-  route exists and works when navigated to directly, but
-  `Dashboard.tsx` doesn't yet check `user.displayName === ""` and
-  bounce to it. New users will reach the dashboard with an empty
-  display name (rendered as "someone" in gift cards). Fix: in
-  `app/src/screens/Dashboard.tsx`, before the existing
-  `group ? null : navigate('/group-setup')` redirect, add an
-  `if (user && !user.displayName.trim()) navigate('/profile-setup')`.
-  Tracked for post-launch.
+---
+
+## Summon rate-limits
+
+The Worker rejects calls with HTTP 429 once either bucket is full.
+Both counters live in the `RATE_LIMIT_KV` namespace declared in
+`worker/wrangler.toml`; entries carry TTLs so the namespace is
+self-cleaning.
+
+| Bucket | Cap | Window | KV key shape |
+|---|---|---|---|
+| Per group | `GROUP_DAILY_CAP = 10` | calendar day (UTC) | `g:<groupId>:<YYYYMMDD>` |
+| Per IP | `IP_HOURLY_CAP = 30` | calendar hour (UTC) | `ip:<ip>:<YYYYMMDDHH>` |
+
+To bump a cap: change the constant in `worker/src/index.ts`,
+`npm run deploy`. The cap takes effect immediately for new
+counter buckets; existing ones retain whatever count they had.
+
+To **provision** the KV namespace on a fresh deploy:
+
+```sh
+cd worker
+wrangler kv namespace create starcharts-rate-limits
+# paste the returned `id` into wrangler.toml's [[kv_namespaces]] block
+npm run deploy
+```
+
+The frontend treats a 429 as a soft outcome: `SummonFlow` switches
+to a "your sky is full for today" panel with a *Pick a preset
+instead* affordance. No console error, no toast.
+
+Content moderation is intentionally **not** done in the Worker —
+Azure's content filter is the source of truth for what's allowed
+through the model. The Worker only validates length and charset.
 
 ---
 

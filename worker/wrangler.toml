@@ -18,6 +18,23 @@ enabled = true
 binding = "BUCKET"
 bucket_name = "starcharts-customs"
 
+# KV namespace for rate-limit counters (per-group / day, per-IP / hour).
+#
+# Provisioning is a one-time manual step:
+#   1) wrangler kv namespace create starcharts-rate-limits
+#   2) uncomment the block below
+#   3) paste the returned id
+#   4) wrangler deploy
+#
+# Until that's done, the Worker boots without rate-limiting and logs
+# a warning to `wrangler tail` — the missing binding is loud, not
+# silent. Counters use TTL so the namespace stays self-cleaning once
+# wired.
+#
+# [[kv_namespaces]]
+# binding = "RATE_LIMIT_KV"
+# id = "..."
+
 # Custom domain: summon.stars.realm.watch.
 # Cloudflare will create the DNS + cert automatically when this is enabled
 # (assuming the realm.watch zone is in this account, which it is).
