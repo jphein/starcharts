@@ -74,19 +74,27 @@ starcharts/
 │   ├── src/
 │   │   ├── screens/    ← SignIn, Dashboard, ChartSky, GiftFlow, SummonFlow,
 │   │   │                 GoalReached, ConstellationMemory, …
-│   │   ├── components/ ← Sky, Star, GiftCard, PresetGallery, PresencePanel, …
+│   │   ├── components/ ← Sky, Star, GiftCard, PresetGallery, LoadingSky,
+│   │   │                 Sigil (visible version badge), …
 │   │   ├── design/     ← tokens, theme, globals.css (light + dark)
 │   │   ├── db/         ← InstantDB client + schema bindings
 │   │   └── hooks/      ← useChart, useGiftsForChart, presence, …
-│   └── scripts/        ← version.mjs (writes /version.json at build)
+│   ├── public/         ← favicon.svg, og.png (1200×630 social card),
+│   │                     CNAME, version.json (written at build)
+│   └── scripts/        ← version.mjs (writes /version.json — runs as
+│                         predev + prebuild so it's present in dev too)
 │
 ├── worker/             ← Cloudflare Worker `starcharts-summon`
 │   └── src/index.ts    ← POST /api/summon → Azure → R2 → { url }
+│                         (KV-backed rate-limits, optional binding)
 │
 ├── assets/stars/       ← preset star artwork (PNG/SVG)
 ├── design_handoff/     ← fidelity references from the design brief
-├── docs/               ← design brief, port plan, preset previews
-├── scripts/            ← generate-stars.py (Python tooling for preset assets)
+├── docs/               ← design brief, port plan, preset previews,
+│                         email/magic-code.html (mirror of the
+│                         InstantDB magic-link template)
+├── scripts/            ← generate-stars.py (Python tooling for preset
+│                         assets), og-source.html (OG card source)
 ├── .github/workflows/  ← deploy.yml — GH Pages on push to main
 └── RUNBOOK.md          ← operations: deploy, smoke, rotate, troubleshoot
 ```
@@ -126,12 +134,21 @@ starcharts/
   `app/src/db/client.ts`).
 - **Image gen proxy:** one Cloudflare Worker. Validates the prompt, calls
   Azure, stores the PNG in R2, returns a public URL. Never exposes the API
-  key to the browser.
+  key to the browser. Rate-limited per group/day and per-IP/hour via a
+  Cloudflare KV namespace — see
+  [RUNBOOK → Summon rate-limits](./RUNBOOK.md#summon-rate-limits).
 - **Versioning:** `app/scripts/version.mjs` writes `/version.json` at build
-  with git metadata (hash, branch, dirty, built). Realm word is `stellar`,
-  per the project-wide [`realm-sigil`](https://github.com/jphein/realm-sigil)
-  convention; the script bakes the fields itself rather than importing the
-  library, so there's no runtime dependency to add.
+  with git metadata (hash, branch, dirty, built). It runs as both `predev`
+  and `prebuild` so the file is present in `npm run dev` too. Realm word
+  is `stellar`, per the project-wide
+  [`realm-sigil`](https://github.com/jphein/realm-sigil) convention.
+  A small `<Sigil />` badge in the bottom-left corner reads that file at
+  runtime and shows the live build at a glance — pulsing ✦ + realm word
+  + short hash, hover-expand into branch + commit + GitHub-link panel.
+- **Social previews:** static `og:*` / `twitter:*` tags in
+  `app/index.html`, paired with `app/public/og.png` (1200×630). HashRouter
+  means scrapers only see the index `<head>`, so one card serves every
+  shared link.
 
 ---
 

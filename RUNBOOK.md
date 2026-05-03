@@ -4,17 +4,20 @@ Operational guide for **starcharts**, a collaborative starchart for families
 and friends. Pairs the React/Vite frontend with a Cloudflare Worker
 (`starcharts-summon`) that mints custom stars via Azure AI Foundry.
 
-## Deploy status (autonomous deploy 2026-05-03)
+## Deploy status (last updated 2026-05-03)
 
-All first-time setup steps below are **done**. Live now:
+Live now:
 
-- ✅ GH Actions workflow runs on push and deploys the SPA (last run: 40s, success).
+- ✅ GH Actions workflow runs on push and deploys the SPA.
 - ✅ DNS `stars.realm.watch` → `jphein.github.io` (CNAME, in Cloudflare zone `realm.watch`).
-- ✅ GH Pages custom domain set to `stars.realm.watch`. Cert provisioning auto in progress (5-30 min on first deploy).
+- ✅ GH Pages custom domain set to `stars.realm.watch`. HTTPS enforced.
 - ✅ R2 bucket `starcharts-customs` created.
 - ✅ Worker `starcharts-summon` deployed with all four Azure secrets set.
 - ✅ Worker custom domain `summon.stars.realm.watch` configured automatically by wrangler.
-- ✅ End-to-end smoke test: `POST https://starcharts-summon.jp5.workers.dev/api/summon` returns a real 1.6MB transparent RGBA PNG via R2.
+- ✅ InstantDB magic-link email branded — custom subject (`Step into Starcharts — {code}`), From name (`Starcharts`), and HTML body (dark sky + gold ceremony) all set on the InstantDB dashboard.
+- ✅ Static OG/Twitter card (`app/public/og.png`) ships with the SPA; meta tags in `app/index.html`.
+- ✅ Visible `<Sigil />` version badge mounted at app shell, reading `/version.json`.
+- ⏳ **Cloudflare KV namespace for Worker rate-limits** — provisioning is the only remaining manual step. The Worker boots without it (rate-limits skipped, `wrangler tail` warns); enabling enforcement is a one-time `wrangler kv namespace create starcharts-rate-limits` + paste-id-in-wrangler.toml + redeploy. See [Summon rate-limits](#summon-rate-limits).
 
 **LAN testing note:** JP's gatekeeper firewall intercepts `*.realm.watch` queries and routes to 10.0.6.11 (the realm-portal box). To test the live deployment from inside the LAN, hit the workers.dev URL directly or override locally via `/etc/hosts`. From outside the LAN, public DNS resolves correctly via Cloudflare.
 
@@ -37,8 +40,10 @@ All first-time setup steps below are **done**. Live now:
 | **Summon Worker** | Cloudflare Workers (`starcharts-summon`) | `https://summon.stars.realm.watch/api/summon` (or the `*.workers.dev` route until DNS) | `cd worker && npx wrangler deploy` |
 | **Custom star storage** | Cloudflare R2 bucket `starcharts-customs` | served via Worker at `/r2/<key>` (or `PUBLIC_BUCKET_URL/<key>` once R2 public access is wired) | Worker writes on each successful summon |
 | **Database / auth** | InstantDB (`e526d9cf-e783-4a99-b3b3-a69730ecdd7e`) | client-side via `@instantdb/react` | Schema editing via [InstantDB dashboard](https://instantdb.com/dash) |
-| **Magic-link mail** | InstantDB managed | n/a | InstantDB sends; no SMTP to manage |
-| **Version endpoint** | shipped inside `dist/` | `https://stars.realm.watch/version.json` | written by `app/scripts/version.mjs` during `prebuild` |
+| **Magic-link mail** | InstantDB managed (custom subject + From + HTML body set) | n/a | InstantDB sends. Template lives on the dashboard, not in this repo — see [Magic-link email branding](#magic-link-email-branding) |
+| **Rate-limit counters** | Cloudflare KV namespace (binding `RATE_LIMIT_KV`) | n/a | Worker writes via TTL keys; ⏳ provisioning still pending — see [Summon rate-limits](#summon-rate-limits) |
+| **Version endpoint** | shipped inside `dist/` | `https://stars.realm.watch/version.json` | written by `app/scripts/version.mjs` (`predev` + `prebuild` hooks) |
+| **Sigil badge** | mounted at app shell | bottom-left of every screen | reads `/version.json` at runtime; click → GitHub commit |
 
 The web app is a HashRouter SPA, so deep links work without server-side
 rewrites. `app/public/404.html` is included as belt-and-braces for any
@@ -566,6 +571,38 @@ instead* affordance. No console error, no toast.
 Content moderation is intentionally **not** done in the Worker —
 Azure's content filter is the source of truth for what's allowed
 through the model. The Worker only validates length and charset.
+
+---
+
+## Magic-link email branding
+
+The InstantDB magic-code email is fully customized, but the **template
+lives on the InstantDB dashboard, not in this repo**. This is by
+design — InstantDB sends the email, and there's no code path in
+the repo that constructs it.
+
+Current settings (set via *Auth → Custom Magic Code Email* on the
+[InstantDB dashboard](https://instantdb.com/dash)):
+
+| Field | Value |
+|---|---|
+| **Subject** | `Step into Starcharts — {code}` |
+| **From** | `Starcharts` (sender display name) |
+| **Body** | Custom HTML — dark sky background, gold ✦ eyebrow, Cormorant headline, big tabular code card, footer with `stars.realm.watch`. Uses inline styles only (email clients don't load web fonts; Cormorant falls back to Georgia). |
+
+Variables supported: `{code}`, `{app_title}`, `{user_email}`. The
+sender domain stays `verify@auth-pm.instantdb.com` (locked by
+InstantDB's free plan; a custom From-address requires a verified
+sender domain on a paid tier).
+
+To **edit** the template: log in to the InstantDB dashboard, open
+the `starcharts` app, *Auth → Custom Magic Code Email*. Submit
+saves it; the next code email uses the new template immediately.
+
+If the template gets deleted or reset by accident, the source-of-
+truth mirror lives at [`docs/email/magic-code.html`](./docs/email/magic-code.html)
+in this repo — re-paste the body block (everything below the
+`<!doctype html>` line) into the dashboard to recover.
 
 ---
 

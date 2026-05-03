@@ -1,0 +1,85 @@
+<!--
+  Starcharts — InstantDB magic-code email template.
+
+  This is a SOURCE-OF-TRUTH MIRROR of the template that lives on the
+  InstantDB dashboard (Auth → Custom Magic Code Email). The dashboard
+  is what actually sends mail; this file exists so the template
+  survives an accidental dashboard reset and is reviewable in code.
+
+  To re-deploy this template:
+    1. Log in to https://instantdb.com/dash
+    2. Open the `starcharts` app → Auth → Custom Magic Code Email
+    3. Subject:  Step into Starcharts — {code}
+    4. From:     Starcharts
+    5. Body:     paste everything below the `<!doctype html>` line
+    6. Submit
+
+  Notes on the design:
+    - Inline styles only — email clients don't honor web fonts or CSS
+      modules. Cormorant Garamond is requested but degrades to
+      Georgia / Times New Roman, which still reads ceremoniously.
+    - Table-based layout for compatibility with Outlook/Gmail/Apple Mail.
+    - `{code}`, `{app_title}`, `{user_email}` are InstantDB template
+      variables. `{code}` is required by InstantDB in both subject + body.
+    - Dark gradient + gold accent matches the app's design tokens.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>Your Starcharts code</title>
+</head>
+<body style="margin:0; padding:0; background:#04061a;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#04061a; padding:32px 12px;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px; width:100%; background:#0a0e2c; border:1px solid rgba(244,241,230,0.14); border-radius:18px;">
+        <tr>
+          <td align="center" style="padding:48px 32px 8px; font-family:Helvetica, Arial, sans-serif; font-size:11px; letter-spacing:0.32em; text-transform:uppercase; color:#f3c46b;">
+            ✦&nbsp;&nbsp;Starcharts
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding:14px 32px 0; font-family:'Cormorant Garamond', Georgia, 'Times New Roman', serif; font-weight:500; font-size:34px; line-height:1.1; color:#f4f1e6;">
+            Step into your sky.
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding:14px 32px 28px; font-family:'Cormorant Garamond', Georgia, 'Times New Roman', serif; font-style:italic; font-size:17px; line-height:1.45; color:rgba(244,241,230,0.7);">
+            Here's the code that opens your chart, {user_email}.
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding:0 32px 8px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="background:#141834; border:1px solid rgba(244,241,230,0.14); border-radius:14px;">
+              <tr>
+                <td align="center" style="padding:18px 28px; font-family:Helvetica, Arial, sans-serif; font-size:36px; font-weight:500; letter-spacing:0.42em; color:#f3c46b;">
+                  {code}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding:24px 40px 8px; font-family:'Cormorant Garamond', Georgia, 'Times New Roman', serif; font-style:italic; font-size:15px; line-height:1.55; color:rgba(244,241,230,0.6);">
+            Paste it back into Starcharts to sign in. The code expires in 10 minutes and only works once.
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding:36px 32px 28px; font-family:Helvetica, Arial, sans-serif; font-size:10px; letter-spacing:0.24em; text-transform:uppercase; color:rgba(244,241,230,0.32);">
+            ✦&nbsp;&nbsp;stars.realm.watch&nbsp;&nbsp;✦
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding:0 32px 40px; font-family:'Cormorant Garamond', Georgia, 'Times New Roman', serif; font-style:italic; font-size:12px; color:rgba(244,241,230,0.4);">
+            If you didn't ask for this, you can ignore it.
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>
