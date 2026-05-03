@@ -19,6 +19,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 import { id } from "@instantdb/react";
 import { Sky } from "../components/Sky";
+import { LoadingSky } from "../components/LoadingSky";
 import { PresetGallery } from "../components/PresetGallery";
 import { db } from "../db/client";
 import { useCurrentUser } from "../hooks/useCurrentUser";
@@ -154,11 +155,7 @@ export default function GiftFlow() {
     !chart ||
     giftsLoading
   ) {
-    return (
-      <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
-        <Sky />
-      </div>
-    );
+    return <LoadingSky />;
   }
 
   function toggleHonoree(memberId: string) {

@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sky } from "../components/Sky";
+import { LoadingSky } from "../components/LoadingSky";
 import { ChartCard } from "../components/ChartCard";
 import { MemberDots } from "../components/MemberDots";
 import { useCurrentUser } from "../hooks/useCurrentUser";
@@ -103,14 +104,10 @@ export default function Dashboard() {
     }
   }, [userLoading, user, groupLoading, group, navigate]);
 
-  // While redirecting or loading, render the empty sky so the page
-  // never flashes the wrong content.
+  // While redirecting or loading, render the empty sky with a soft hint
+  // (delayed so a fast load is just a flash, not a flicker of text).
   if (userLoading || !user || groupLoading || !group) {
-    return (
-      <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
-        <Sky />
-      </div>
-    );
+    return <LoadingSky hint="opening your sky…" />;
   }
 
   const copyInvite = async () => {
@@ -135,11 +132,17 @@ export default function Dashboard() {
 
       <div
         style={{
-          position: "relative",
-          height: "100%",
+          // Overlay the content directly on the Sky background. Without
+          // explicit positioning the content div was a normal-flow sibling
+          // of <Sky/> (min-height: 100vh) and got pushed *below* the
+          // viewport, then clipped by overflow:hidden — the page rendered
+          // as a starfield with all UI offscreen.
+          position: "absolute",
+          inset: 0,
           overflowY: "auto",
           display: "flex",
           flexDirection: "column",
+          zIndex: 1,
         }}
       >
         <header style={headerStyle}>

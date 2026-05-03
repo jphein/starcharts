@@ -1,27 +1,41 @@
 // Sign-in screen — two-step magic-link flow (email → 6-digit code).
 //
 // Step 1 sends the magic code via Aurora's `requestMagicCode`. Step 2
-// verifies it via `signInWithCode`. Once auth lands, the user is routed
-// to /group-setup (no group yet) or /dashboard (already in a group).
+// verifies it via `signInWithCode`. Once auth lands, we always navigate
+// to /dashboard and let its gates route onward to /profile-setup or
+// /group-setup as needed — checking `useCurrentGroup` here loses the
+// race because InstantDB persists the session in IndexedDB but our
+// localStorage groupId is set later.
+//
+// If the user is already signed in (IndexedDB session survives reload),
+// we skip the form entirely and bounce to /dashboard.
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sky } from "../components/Sky";
+import { LoadingSky } from "../components/LoadingSky";
 import { requestMagicCode, signInWithCode } from "../lib/auth";
-import { useCurrentGroup } from "../hooks/useCurrentGroup";
+import { useCurrentUser } from "../hooks/useCurrentUser";
 
 type Step = "email" | "code";
 type Status = "idle" | "submitting";
 
 export default function SignIn() {
   const navigate = useNavigate();
-  const { group } = useCurrentGroup();
+  const { user, isLoading: userLoading } = useCurrentUser();
 
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Already authenticated? Bypass the form. Dashboard's gates handle the
+  // rest of the routing (profile setup, group setup, or main view).
+  useEffect(() => {
+    if (userLoading || status === "submitting") return;
+    if (user) navigate("/dashboard", { replace: true });
+  }, [userLoading, user, status, navigate]);
 
   async function handleEmailSubmit(e: FormEvent) {
     e.preventDefault();
@@ -59,7 +73,7 @@ export default function SignIn() {
     setErrorMessage(null);
     try {
       await signInWithCode(email, trimmed);
-      navigate(group ? "/dashboard" : "/group-setup", { replace: true });
+      navigate("/dashboard", { replace: true });
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "That code didn't work — try again.";
@@ -76,6 +90,13 @@ export default function SignIn() {
   }
 
   const submitting = status === "submitting";
+
+  // While auth resolves on cold load — or while the bounce-to-dashboard
+  // effect above is mid-flight — show the loading sky instead of flashing
+  // the form to a user who's already signed in.
+  if (userLoading || (user && !submitting)) {
+    return <LoadingSky hint="opening your sky…" />;
+  }
 
   return (
     <Sky>

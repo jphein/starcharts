@@ -8,6 +8,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { id } from "@instantdb/react";
 import { Sky } from "../components/Sky";
+import { LoadingSky } from "../components/LoadingSky";
 import { db } from "../db/client";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useCurrentGroup } from "../hooks/useCurrentGroup";
@@ -41,11 +42,7 @@ export default function CreateChart() {
   }, [userLoading, user, groupLoading, group, navigate]);
 
   if (userLoading || !user || groupLoading || !group) {
-    return (
-      <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
-        <Sky />
-      </div>
-    );
+    return <LoadingSky />;
   }
 
   const trimmedName = name.trim();

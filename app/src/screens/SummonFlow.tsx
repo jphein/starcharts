@@ -13,6 +13,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Sky } from "../components/Sky";
+import { LoadingSky } from "../components/LoadingSky";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useCurrentGroup } from "../hooks/useCurrentGroup";
 import { useChart } from "../hooks/useChart";
@@ -76,11 +77,7 @@ export default function SummonFlow() {
     chartLoading ||
     !chart
   ) {
-    return (
-      <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
-        <Sky />
-      </div>
-    );
+    return <LoadingSky />;
   }
 
   const trimmedPrompt = prompt.trim();
