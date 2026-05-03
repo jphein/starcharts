@@ -84,11 +84,16 @@ export function Sigil() {
   if (!info) return null;
 
   const built = formatBuiltDate(info.built);
-  const commitUrl =
-    info.commit_url ||
-    (info.repo
+  // Don't synthesize a commit URL when the hash isn't a real one
+  // (the build was done outside a git checkout, fallback fired, etc.)
+  // — a `/commit/unknown` link 404s on GitHub.
+  const hashIsReal =
+    info.hash && info.hash !== "unknown" && info.hash !== "dev";
+  const commitUrl = info.commit_url
+    ? info.commit_url
+    : info.repo && hashIsReal
       ? `${info.repo.replace(/\/+$/, "")}/commit/${info.hash}`
-      : null);
+      : null;
   const { name: magicName } = splitMagicName(info.version);
   const dirtyLabel = info.dirty ? "·" : "";
 

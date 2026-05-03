@@ -224,20 +224,37 @@ interface BucketSpec {
 // to the conventional proxy headers and finally return null. Callers
 // that get null skip the IP bucket entirely instead of mass-keying
 // unidentifiable requests under a single "unknown" string.
+//
+// Each candidate gets a shape check before we return it — we'd rather
+// drop a malformed header into the no-IP path than write garbage into
+// a KV key (which sets a per-prefix bucket and inflates cardinality).
+
+// IPv4 dotted quad, IPv6 hex+colons (with optional :: + bracketed form,
+// and an optional zone-id like %eth0). Not a strict validator — we
+// don't need it to be — just enough to reject obvious garbage like
+// hostnames, control chars, and HTML payloads. Length-capped at 64
+// to keep KV keys bounded.
+const IP_SHAPE = /^[\[\]a-fA-F0-9:.%]{1,64}$/;
+
+function isIpish(value: string): boolean {
+  return IP_SHAPE.test(value);
+}
+
 function resolveClientIp(request: Request): string | null {
   const cfip = request.headers.get("CF-Connecting-IP");
-  if (cfip && cfip.length > 0) return cfip;
+  if (cfip && isIpish(cfip)) return cfip;
 
   const xff = request.headers.get("X-Forwarded-For");
   if (xff) {
-    // X-Forwarded-For is a comma-separated chain; the first entry is the
-    // closest-to-origin client. Trim and validate it has *some* shape.
+    // X-Forwarded-For is a comma-separated chain; the first entry is
+    // the closest-to-origin client. Trim and shape-check it before
+    // accepting.
     const first = xff.split(",")[0]?.trim();
-    if (first) return first;
+    if (first && isIpish(first)) return first;
   }
 
   const xreal = request.headers.get("X-Real-IP");
-  if (xreal && xreal.length > 0) return xreal;
+  if (xreal && isIpish(xreal)) return xreal;
 
   return null;
 }
