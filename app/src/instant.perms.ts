@@ -127,21 +127,17 @@ const rules = {
       // immediately after creation.
       create: "auth.id != null",
 
-      // Charts are functionally immutable except for `completedAt`,
-      // which is written exactly once when a gift hits the goal.
-      // Locking `name`, `goalCount`, `reward`, and `createdAt` to
-      // their current values prevents a member from retroactively
-      // rewriting the goal-reward pact. The chart's group link is
-      // also implicitly locked since we don't grant link/unlink
-      // here (a re-associate would otherwise leak the chart's
-      // gifts to a different tenant's members).
-      update:
-        "auth.id != null && " +
-        "auth.id in data.ref('group.members.id') && " +
-        "newData.name == data.name && " +
-        "newData.goalCount == data.goalCount && " +
-        "newData.reward == data.reward && " +
-        "newData.createdAt == data.createdAt",
+      // Members can update. Tried locking everything except
+      // `completedAt` via `newData.X == data.X` clauses, but the
+      // goal-reached transact (chart.update with only completedAt
+      // set) failed against those equality checks — InstantDB's
+      // `newData` for a partial update may not echo back the
+      // unchanged fields the way the rule expected. Reverted to
+      // simple membership-only until the partial-update semantics
+      // are nailed down. Tighter immutability of name/goalCount/
+      // reward/createdAt belongs in a Worker write proxy or in a
+      // link-rule pattern.
+      update: "auth.id != null && auth.id in data.ref('group.members.id')",
 
       // Charts are not deletable in v1 — completed charts become
       // memories per the design brief.
