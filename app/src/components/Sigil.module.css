@@ -66,9 +66,18 @@
   transform-origin: center;
 }
 
-.realm {
+.magicName {
+  /* Two-word realm-sigil name ("Distant Kuiper"). Project serif so it
+     reads as a proper title rather than the tracked code label the
+     rest of the eyebrow uses. */
+  font-family: var(--sc-serif);
+  font-style: italic;
   font-weight: 500;
-  letter-spacing: 0.22em;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sc-fg);
+  font-size: 13px;
+  line-height: 1;
 }
 
 .divider {
