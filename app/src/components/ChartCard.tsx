@@ -1,11 +1,17 @@
-import { useState, type CSSProperties } from "react";
+import { useState, useMemo, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sky } from "./Sky";
+import { Star } from "./Star";
+import { useGiftsForChart } from "../hooks/useGiftsForChart";
+import { expandClusterPositions } from "../lib/starPositioning";
 import type { Chart } from "../types";
 
 interface ChartCardProps {
   chart: Chart;
 }
+
+const PREVIEW_STAR_SIZE = 26;
+const MAX_PREVIEW_STARS = 12;
 
 const cardBase: CSSProperties = {
   position: "relative",
@@ -38,6 +44,19 @@ export function ChartCard({ chart }: ChartCardProps) {
 
   const seed = hashSeed(chart.id);
 
+  const { gifts } = useGiftsForChart(chart.id);
+  const previewStars = useMemo(() => {
+    const positions: { x: number; y: number; style: string; customImageUrl?: string }[] = [];
+    for (const gift of gifts) {
+      if (positions.length >= MAX_PREVIEW_STARS) break;
+      for (const pos of expandClusterPositions(gift)) {
+        if (positions.length >= MAX_PREVIEW_STARS) break;
+        positions.push({ x: pos.x, y: pos.y, style: gift.style, customImageUrl: gift.starImageUrl || undefined });
+      }
+    }
+    return positions;
+  }, [gifts]);
+
   return (
     <div
       role="button"
@@ -58,6 +77,21 @@ export function ChartCard({ chart }: ChartCardProps) {
     >
       <div style={{ position: "absolute", inset: 0 }}>
         <Sky dustCount={12} seed={seed} />
+      </div>
+
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+        {previewStars.map((star, i) => (
+          <Star
+            key={i}
+            style={star.style}
+            customImageUrl={star.customImageUrl}
+            x={star.x}
+            y={star.y}
+            size={PREVIEW_STAR_SIZE}
+            alt=""
+            delay={i * 0.15}
+          />
+        ))}
       </div>
 
       <div
