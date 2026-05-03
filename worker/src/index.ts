@@ -23,7 +23,9 @@
 
 export interface Env {
   BUCKET: R2Bucket;
-  RATE_LIMIT_KV: KVNamespace;
+  // Optional — Worker boots without it and skips rate-limiting until
+  // the namespace is provisioned (see wrangler.toml comment).
+  RATE_LIMIT_KV?: KVNamespace;
   AZURE_OPENAI_ENDPOINT: string;
   AZURE_OPENAI_API_KEY: string;
   AZURE_OPENAI_DEPLOYMENT: string;
@@ -103,8 +105,15 @@ async function handleSummon(request: Request, env: Env): Promise<Response> {
   const groupId = rawGroupId;
 
   // Rate-limits run before we touch Azure or R2 — refuse fast and cheap.
+  //
+  // Trust model: `groupId` arrives from the (unauthenticated) browser, so
+  // the per-group cap is *advisory* — it helps honest users budget their
+  // summons across the day. The per-IP cap (30/hour) is the real abuse
+  // defense, since it keys off CF-Connecting-IP which the client can't
+  // forge. If a serious abuser shows up, tightening the IP cap or putting
+  // an auth-token check in front of this is the next move.
   const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
-  const limit = await checkRateLimits(env, groupId, ip);
+  const limit = await checkAndBumpRateLimits(env, groupId, ip);
   if (limit.blocked) {
     const headers = new Headers({ "Content-Type": "application/json; charset=utf-8" });
     headers.set("Retry-After", String(limit.retryAfterSeconds));
@@ -190,13 +199,6 @@ async function handleSummon(request: Request, env: Env): Promise<Response> {
     ? `${publicBase}/${key}`
     : new URL(`/r2/${key}`, request.url).toString();
 
-  // Bump counters only after a successful generation — failed Azure
-  // calls don't burn the user's daily quota. Errors here are logged
-  // but don't fail the response; the user already got their star.
-  await bumpRateLimits(env, groupId, ip).catch((err) => {
-    console.error("rate-limit bump failed", err);
-  });
-
   return json({ url: imageUrl }, 200);
 }
 
@@ -239,14 +241,44 @@ function rateLimitBuckets(groupId: string, ip: string, now: Date): BucketSpec[] 
   ];
 }
 
-async function checkRateLimits(
+// Combined check + bump: read each bucket, refuse on cap, otherwise
+// increment and store. Bumping *before* the Azure call (instead of
+// after success) tightens the cap on Azure spend in a burst — a
+// failed generation still uses a quota slot, but the only thing
+// that grows is the counter, not the bill.
+//
+// Defensive: if the KV binding isn't provisioned (placeholder id in
+// wrangler.toml, or a fresh deploy where `wrangler kv namespace
+// create` hasn't run yet), skip rate-limiting entirely with a loud
+// console warning. The Worker stays useful and `wrangler tail`
+// shows the missing binding.
+//
+// Atomicity: KV doesn't have atomic counters. A concurrent burst of
+// N requests near the cap can all see the same pre-bump count and
+// pass through — we accept a small overshoot rather than spending a
+// Durable Object on this. Caps are sized with that slack in mind.
+async function checkAndBumpRateLimits(
   env: Env,
   groupId: string,
   ip: string,
 ): Promise<RateLimitDecision> {
+  const kv = env.RATE_LIMIT_KV;
+  if (!kv || typeof kv.get !== "function") {
+    console.warn(
+      "RATE_LIMIT_KV binding missing — rate-limiting disabled. " +
+        "Run `wrangler kv namespace create starcharts-rate-limits` " +
+        "and update wrangler.toml.",
+    );
+    return { blocked: false, retryAfterSeconds: 0, message: "" };
+  }
+
   const buckets = rateLimitBuckets(groupId, ip, new Date());
+
+  // First pass: refuse if any bucket is already at cap. Then bump
+  // every bucket (including the one we wouldn't have hit at cap)
+  // so the daily/hourly history stays accurate.
   for (const b of buckets) {
-    const current = await readCount(env.RATE_LIMIT_KV, b.key);
+    const current = await readCount(kv, b.key);
     if (current >= b.cap) {
       return {
         blocked: true,
@@ -256,22 +288,17 @@ async function checkRateLimits(
       };
     }
   }
-  return { blocked: false, retryAfterSeconds: 0, message: "" };
-}
 
-async function bumpRateLimits(env: Env, groupId: string, ip: string): Promise<void> {
-  const buckets = rateLimitBuckets(groupId, ip, new Date());
-  // KV doesn't have atomic counters; read-modify-write is fine at this
-  // scale — worst case a burst of N concurrent requests overshoots by
-  // a few. Run in parallel since both writes are independent.
   await Promise.all(
     buckets.map(async (b) => {
-      const current = await readCount(env.RATE_LIMIT_KV, b.key);
-      await env.RATE_LIMIT_KV.put(b.key, String(current + 1), {
+      const current = await readCount(kv, b.key);
+      await kv.put(b.key, String(current + 1), {
         expirationTtl: b.ttlSeconds,
       });
     }),
   );
+
+  return { blocked: false, retryAfterSeconds: 0, message: "" };
 }
 
 async function readCount(kv: KVNamespace, key: string): Promise<number> {
