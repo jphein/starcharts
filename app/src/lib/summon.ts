@@ -42,7 +42,7 @@ export interface SummonResult {
 
 export interface SummonArgs {
   prompt: string;
-  groupId: string;
+  chartId: string;
 }
 
 export async function summonStar(args: SummonArgs): Promise<SummonResult> {
@@ -53,8 +53,8 @@ export async function summonStar(args: SummonArgs): Promise<SummonResult> {
   if (trimmed.length > PROMPT_MAX) {
     throw new SummonError(`Keep it under ${PROMPT_MAX} characters.`);
   }
-  if (!args.groupId) {
-    throw new SummonError("Couldn't tell which group you're in — try refreshing.");
+  if (!args.chartId) {
+    throw new SummonError("Couldn't tell which chart you're in — try refreshing.");
   }
 
   const controller = new AbortController();
@@ -65,7 +65,7 @@ export async function summonStar(args: SummonArgs): Promise<SummonResult> {
     response = await fetch(SUMMON_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: trimmed, groupId: args.groupId }),
+      body: JSON.stringify({ prompt: trimmed, groupId: args.chartId }),
       signal: controller.signal,
     });
   } catch (err) {

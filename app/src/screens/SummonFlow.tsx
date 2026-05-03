@@ -15,7 +15,6 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Sky } from "../components/Sky";
 import { LoadingSky } from "../components/LoadingSky";
 import { useCurrentUser } from "../hooks/useCurrentUser";
-import { useCurrentGroup } from "../hooks/useCurrentGroup";
 import { useChart } from "../hooks/useChart";
 import { summonStar, RateLimitError } from "../lib/summon";
 
@@ -55,7 +54,6 @@ export default function SummonFlow() {
   const prefersReducedMotion = useReducedMotion();
 
   const { user, isLoading: userLoading } = useCurrentUser();
-  const { group, isLoading: groupLoading } = useCurrentGroup();
   const { chart, isLoading: chartLoading } = useChart(chartId);
 
   const [phase, setPhase] = useState<Phase>("input");
@@ -71,13 +69,6 @@ export default function SummonFlow() {
     }
   }, [userLoading, user, navigate]);
 
-  // Group gate.
-  useEffect(() => {
-    if (!userLoading && user && !groupLoading && !group) {
-      navigate("/group-setup", { replace: true });
-    }
-  }, [userLoading, user, groupLoading, group, navigate]);
-
   // Missing chart → dashboard.
   useEffect(() => {
     if (!chartLoading && chartId && !chart) {
@@ -92,26 +83,19 @@ export default function SummonFlow() {
     }
   }, [chart, chartId, navigate]);
 
-  if (
-    userLoading ||
-    !user ||
-    groupLoading ||
-    !group ||
-    chartLoading ||
-    !chart
-  ) {
+  if (userLoading || !user || chartLoading || !chart) {
     return <LoadingSky />;
   }
 
   const trimmedPrompt = prompt.trim();
 
   async function runSummon(p: string) {
-    if (!group) return; // gate above guarantees this, but TS narrowing wants it
+    if (!chartId) return;
     setPhase("forming");
     setErrorMessage(null);
     setRateLimit(null);
     try {
-      const { url } = await summonStar({ prompt: p, groupId: group.id });
+      const { url } = await summonStar({ prompt: p, chartId });
       setResultUrl(url);
       setPhase("preview");
     } catch (err) {

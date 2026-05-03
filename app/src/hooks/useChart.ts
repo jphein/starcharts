@@ -50,6 +50,8 @@ export function useChart(chartId: string | undefined): UseChartResult {
     name: row.name,
     goalCount: row.goalCount,
     reward: row.reward,
+    inviteCode: row.inviteCode ?? "",
+    ownerId: row.ownerId ?? "",
     createdAt: row.createdAt,
     completedAt: row.completedAt ?? undefined,
   };

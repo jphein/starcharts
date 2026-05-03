@@ -23,7 +23,7 @@ import { LoadingSky } from "../components/LoadingSky";
 import { PresetGallery } from "../components/PresetGallery";
 import { db } from "../db/client";
 import { useCurrentUser } from "../hooks/useCurrentUser";
-import { useCurrentGroup } from "../hooks/useCurrentGroup";
+import { useChartMembers } from "../hooks/useChartMembers";
 import { useChart } from "../hooks/useChart";
 import { useGiftsForChart } from "../hooks/useGiftsForChart";
 import { pickGiftAnchor } from "../lib/starPositioning";
@@ -66,7 +66,7 @@ export default function GiftFlow() {
   const navigate = useNavigate();
 
   const { user, isLoading: userLoading } = useCurrentUser();
-  const { group, members, isLoading: groupLoading } = useCurrentGroup();
+  const { members, isLoading: membersLoading } = useChartMembers(chartId);
   const { chart, isLoading: chartLoading } = useChart(chartId);
   const { gifts: existingGifts, isLoading: giftsLoading } =
     useGiftsForChart(chartId);
@@ -117,13 +117,6 @@ export default function GiftFlow() {
     }
   }, [userLoading, user, navigate]);
 
-  // Group gate.
-  useEffect(() => {
-    if (!userLoading && user && !groupLoading && !group) {
-      navigate("/group-setup", { replace: true });
-    }
-  }, [userLoading, user, groupLoading, group, navigate]);
-
   // Missing chart → back to dashboard.
   useEffect(() => {
     if (!chartLoading && chartId && !chart) {
@@ -149,8 +142,7 @@ export default function GiftFlow() {
   if (
     userLoading ||
     !user ||
-    groupLoading ||
-    !group ||
+    membersLoading ||
     chartLoading ||
     !chart ||
     giftsLoading
@@ -399,8 +391,8 @@ function HonoreesGrid({
   if (members.length === 0) {
     return (
       <p style={emptyStateStyle}>
-        Your group has no other members yet — invite someone from the dashboard
-        first.
+        This chart has no other members yet — share the invite code from the
+        chart view first.
       </p>
     );
   }

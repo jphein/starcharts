@@ -13,7 +13,6 @@ import { Star } from "../components/Star";
 import { GiftCard } from "../components/GiftCard";
 import { PresencePanel } from "../components/PresencePanel";
 import { useCurrentUser } from "../hooks/useCurrentUser";
-import { useCurrentGroup } from "../hooks/useCurrentGroup";
 import { useChart } from "../hooks/useChart";
 import {
   useGiftsForChart,
@@ -39,7 +38,6 @@ export default function ConstellationMemory() {
   const navigate = useNavigate();
 
   const { user, isLoading: userLoading } = useCurrentUser();
-  const { group, isLoading: groupLoading } = useCurrentGroup();
   const { chart, isLoading: chartLoading } = useChart(chartId);
   const { gifts, isLoading: giftsLoading } = useGiftsForChart(chartId);
 
@@ -51,13 +49,6 @@ export default function ConstellationMemory() {
       navigate("/sign-in", { replace: true });
     }
   }, [userLoading, user, navigate]);
-
-  // Group gate.
-  useEffect(() => {
-    if (!userLoading && user && !groupLoading && !group) {
-      navigate("/group-setup", { replace: true });
-    }
-  }, [userLoading, user, groupLoading, group, navigate]);
 
   // Chart gate.
   useEffect(() => {
@@ -79,14 +70,7 @@ export default function ConstellationMemory() {
     return memoryDateFormatter.format(new Date(chart.completedAt));
   }, [chart?.completedAt]);
 
-  if (
-    userLoading ||
-    !user ||
-    groupLoading ||
-    !group ||
-    chartLoading ||
-    !chart
-  ) {
+  if (userLoading || !user || chartLoading || !chart) {
     return <LoadingSky />;
   }
 

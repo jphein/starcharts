@@ -1,16 +1,3 @@
-// Hero scene: a chart's full sky, alive with every gift its members have given.
-//
-// Each gift expands into a deterministic cluster (anchor + N-1 satellites) so
-// every client sees the same arrangement once the realtime row arrives. The
-// translucent top bar mirrors Dashboard's frosted header style; the bottom-
-// right "Give a star" CTA is the only authoring affordance — taps anywhere
-// on a star open the GiftCard bottom-sheet.
-//
-// Goal handling: when the chart's `completedAt` flips to a value we haven't
-// celebrated yet (sessionStorage `sc_celebrated_${chartId}` not set), we
-// route to /charts/:id/celebrate. If the flag is already set, the chart
-// is in memory mode and we bounce to /charts/:id/memory instead.
-
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
@@ -20,7 +7,6 @@ import { Star } from "../components/Star";
 import { GiftCard } from "../components/GiftCard";
 import { PresencePanel } from "../components/PresencePanel";
 import { useCurrentUser } from "../hooks/useCurrentUser";
-import { useCurrentGroup } from "../hooks/useCurrentGroup";
 import { useChart } from "../hooks/useChart";
 import {
   useGiftsForChart,
@@ -37,11 +23,11 @@ export default function ChartSky() {
   const navigate = useNavigate();
 
   const { user, isLoading: userLoading } = useCurrentUser();
-  const { group, isLoading: groupLoading } = useCurrentGroup();
   const { chart, isLoading: chartLoading } = useChart(chartId);
   const { gifts, isLoading: giftsLoading } = useGiftsForChart(chartId);
 
   const [selectedGift, setSelectedGift] = useState<GiftWithLinks | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Auth gate.
   useEffect(() => {
@@ -50,13 +36,6 @@ export default function ChartSky() {
     }
   }, [userLoading, user, navigate]);
 
-  // Group gate.
-  useEffect(() => {
-    if (!userLoading && user && !groupLoading && !group) {
-      navigate("/group-setup", { replace: true });
-    }
-  }, [userLoading, user, groupLoading, group, navigate]);
-
   // Chart gate: if loaded but missing, bounce home.
   useEffect(() => {
     if (!chartLoading && chartId && chart === null) {
@@ -64,8 +43,7 @@ export default function ChartSky() {
     }
   }, [chartLoading, chart, chartId, navigate]);
 
-  // Goal-reached routing: if completedAt arrives and we haven't celebrated,
-  // go to /celebrate. If we've already celebrated this chart, send to memory.
+  // Goal-reached routing.
   useEffect(() => {
     if (!chart || !chartId || chart.completedAt == null) return;
     const celebrated =
@@ -83,16 +61,18 @@ export default function ChartSky() {
     [gifts],
   );
 
-  // Render the empty sky while gating/loading so the page never flashes the
-  // wrong content.
-  if (
-    userLoading ||
-    !user ||
-    groupLoading ||
-    !group ||
-    chartLoading ||
-    !chart
-  ) {
+  const copyInvite = async () => {
+    if (!chart) return;
+    try {
+      await navigator.clipboard.writeText(chart.inviteCode);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      // Clipboard denied; code is still visible in the capsule.
+    }
+  };
+
+  if (userLoading || !user || chartLoading || !chart) {
     return <LoadingSky />;
   }
 
@@ -140,6 +120,14 @@ export default function ChartSky() {
 
         <div style={trailingStyle}>
           <PresencePanel chartId={chart.id} />
+          <button
+            type="button"
+            onClick={copyInvite}
+            style={inviteCapsuleStyle}
+            title="Click to copy invite code"
+          >
+            {copied ? "copied!" : `Invite: ${chart.inviteCode}`}
+          </button>
           <div style={progressStyle} aria-label="Star progress">
             <span style={progressNumStyle}>{totalCount}</span>
             <span style={progressSepStyle}> / </span>
@@ -172,8 +160,6 @@ export default function ChartSky() {
   );
 }
 
-// Star count prop is typed as 1 | 2 | 3 | 5 — clamp gift.count down to the
-// nearest tier so a count of 4 reads as a 3-cluster, 6+ as a 5-cluster, etc.
 function normalizeCount(n: number): 1 | 2 | 3 | 5 {
   if (n >= 5) return 5;
   if (n >= 3) return 3;
@@ -241,7 +227,22 @@ const titleStyle: CSSProperties = {
 const trailingStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
-  gap: 12,
+  gap: 10,
+  flexShrink: 0,
+};
+
+const inviteCapsuleStyle: CSSProperties = {
+  fontFamily: "var(--sc-sans)",
+  fontSize: 11,
+  letterSpacing: "0.08em",
+  color: "var(--sc-fg-muted)",
+  background: "var(--sc-surface)",
+  border: "1px solid var(--sc-stroke)",
+  padding: "5px 10px",
+  borderRadius: 999,
+  cursor: "pointer",
+  transition: "color 150ms ease, border-color 150ms ease",
+  userSelect: "none",
   flexShrink: 0,
 };
 

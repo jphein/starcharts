@@ -11,7 +11,7 @@ import { Sky } from "../components/Sky";
 import { LoadingSky } from "../components/LoadingSky";
 import { db } from "../db/client";
 import { useCurrentUser } from "../hooks/useCurrentUser";
-import { useCurrentGroup } from "../hooks/useCurrentGroup";
+import { generateInviteCode } from "../lib/inviteCode";
 
 type SubmitState =
   | { status: "idle" | "submitting" }
@@ -20,7 +20,6 @@ type SubmitState =
 export default function CreateChart() {
   const navigate = useNavigate();
   const { user, isLoading: userLoading } = useCurrentUser();
-  const { group, isLoading: groupLoading } = useCurrentGroup();
 
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("50");
@@ -34,14 +33,7 @@ export default function CreateChart() {
     }
   }, [userLoading, user, navigate]);
 
-  // Group gate: signed in but no current group → group setup.
-  useEffect(() => {
-    if (!userLoading && user && !groupLoading && !group) {
-      navigate("/group-setup", { replace: true });
-    }
-  }, [userLoading, user, groupLoading, group, navigate]);
-
-  if (userLoading || !user || groupLoading || !group) {
+  if (userLoading || !user) {
     return <LoadingSky />;
   }
 
@@ -55,7 +47,7 @@ export default function CreateChart() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (submitting) return;
-    if (!formValid || !group) {
+    if (!formValid) {
       setSubmitState({ status: "error", message: "Fill in every field to begin." });
       return;
     }
@@ -63,15 +55,18 @@ export default function CreateChart() {
     setSubmitState({ status: "submitting" });
     try {
       const newId = id();
+      const inviteCode = generateInviteCode();
       await db.transact(
         db.tx.charts[newId]
           .update({
             name: trimmedName,
             goalCount: parsedGoal,
             reward: trimmedReward,
+            inviteCode,
+            ownerId: user.id,
             createdAt: Date.now(),
           })
-          .link({ group: group.id }),
+          .link({ members: user.id }),
       );
       navigate(`/charts/${newId}`);
     } catch (err) {

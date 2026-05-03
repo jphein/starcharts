@@ -1,12 +1,3 @@
-// InstantDB schema for Starcharts.
-// See docs/2026-05-02-design-port-plan.md §5.
-//
-// Conventions:
-// - timestamps are epoch-ms numbers (i.number())
-// - x, y on gifts are normalized 0..1 floats so positions render
-//   correctly across viewport sizes
-// - inviteCode is unique + indexed so we can resolve "join by code"
-
 import { i } from "@instantdb/react";
 
 export const schema = i.schema({
@@ -16,15 +7,12 @@ export const schema = i.schema({
       displayName:  i.string(),
       avatarSeed:   i.string(),
     }),
-    groups: i.entity({
-      name:         i.string(),
-      inviteCode:   i.string().unique().indexed(),
-      createdAt:    i.number(),
-    }),
     charts: i.entity({
       name:         i.string(),
       goalCount:    i.number(),
       reward:       i.string(),
+      inviteCode:   i.string().unique().indexed(),
+      ownerId:      i.string(),
       createdAt:    i.number(),
       completedAt:  i.number().optional(),
     }),
@@ -39,13 +27,9 @@ export const schema = i.schema({
     }),
   },
   links: {
-    groupMembers: {
-      forward: { on: "groups",  has: "many", label: "members"  },
-      reverse: { on: "$users",  has: "many", label: "groups"   },
-    },
-    chartGroup: {
-      forward: { on: "charts",  has: "one",  label: "group"    },
-      reverse: { on: "groups",  has: "many", label: "charts"   },
+    chartMembers: {
+      forward: { on: "charts",  has: "many", label: "members"  },
+      reverse: { on: "$users",  has: "many", label: "charts"   },
     },
     giftChart: {
       forward: { on: "gifts",   has: "one",  label: "chart"    },

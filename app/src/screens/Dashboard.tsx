@@ -1,14 +1,13 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sky } from "../components/Sky";
 import { LoadingSky } from "../components/LoadingSky";
 import { ChartCard } from "../components/ChartCard";
-import { MemberDots } from "../components/MemberDots";
 import { useCurrentUser } from "../hooks/useCurrentUser";
-import { useCurrentGroup } from "../hooks/useCurrentGroup";
-import { useChartsForGroup } from "../hooks/useChartsForGroup";
+import { useMyCharts } from "../hooks/useMyCharts";
 import { signOut } from "../lib/auth";
 import { db } from "../db/client";
+import { isValidInviteCode, normalizeInviteCode } from "../lib/inviteCode";
 
 const headerStyle: CSSProperties = {
   display: "flex",
@@ -29,20 +28,6 @@ const eyebrowStyle: CSSProperties = {
   letterSpacing: "0.18em",
   textTransform: "uppercase",
   color: "var(--sc-fg-faint)",
-};
-
-const inviteCapsule: CSSProperties = {
-  fontFamily: "var(--sc-sans)",
-  fontSize: 11,
-  letterSpacing: "0.08em",
-  color: "var(--sc-fg-muted)",
-  background: "var(--sc-surface)",
-  border: "1px solid var(--sc-stroke)",
-  padding: "6px 12px",
-  borderRadius: 999,
-  cursor: "pointer",
-  transition: "color 150ms ease, border-color 150ms ease",
-  userSelect: "none",
 };
 
 const signOutBtn: CSSProperties = {
@@ -75,17 +60,19 @@ const createTileStyle: CSSProperties = {
   transition: "border-color 200ms ease, color 200ms ease, transform 200ms ease",
 };
 
+type JoinState =
+  | { status: "idle" }
+  | { status: "submitting" }
+  | { status: "error"; message: string };
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, isLoading: userLoading } = useCurrentUser();
-  const { group, members, isLoading: groupLoading } = useCurrentGroup();
-  const { charts, isLoading: chartsLoading } = useChartsForGroup(group?.id);
+  const { charts, isLoading: chartsLoading } = useMyCharts(user?.id);
 
-  const [copied, setCopied] = useState(false);
   const [createHover, setCreateHover] = useState(false);
-  const [editingName, setEditingName] = useState(false);
-  const [nameInput, setNameInput] = useState("");
-  const nameInputRef = useRef<HTMLInputElement>(null);
+  const [joinCode, setJoinCode] = useState("");
+  const [joinState, setJoinState] = useState<JoinState>({ status: "idle" });
 
   // Auth gate: not loading, no user → sign in.
   useEffect(() => {
@@ -101,53 +88,51 @@ export default function Dashboard() {
     }
   }, [userLoading, user, navigate]);
 
-  // Group gate: signed in but no current group → group setup.
-  useEffect(() => {
-    if (!userLoading && user && user.displayName.trim() && !groupLoading && !group) {
-      navigate("/group-setup", { replace: true });
-    }
-  }, [userLoading, user, groupLoading, group, navigate]);
-
-  // While redirecting or loading, render the empty sky with a soft hint
-  // (delayed so a fast load is just a flash, not a flicker of text).
-  if (userLoading || !user || groupLoading || !group) {
+  if (userLoading || !user) {
     return <LoadingSky hint="opening your sky…" />;
   }
-
-  const copyInvite = async () => {
-    try {
-      await navigator.clipboard.writeText(group.inviteCode);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1400);
-    } catch {
-      // Clipboard can be denied (insecure context, permissions); silently
-      // skip — the code is still visible in the capsule.
-    }
-  };
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/sign-in", { replace: true });
   };
 
-  const startEditingName = () => {
-    setNameInput(group.name);
-    setEditingName(true);
-    setTimeout(() => nameInputRef.current?.select(), 0);
-  };
-
-  const commitNameEdit = async () => {
-    const trimmed = nameInput.trim();
-    setEditingName(false);
-    if (trimmed && trimmed !== group.name) {
-      await db.transact(db.tx.groups[group.id].update({ name: trimmed }));
+  const handleJoin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (joinState.status === "submitting" || !user) return;
+    const normalized = normalizeInviteCode(joinCode);
+    if (!isValidInviteCode(normalized)) {
+      setJoinState({ status: "error", message: "Enter a valid 6-character invite code." });
+      return;
+    }
+    setJoinState({ status: "submitting" });
+    try {
+      const result = await db.queryOnce({
+        charts: { $: { where: { inviteCode: normalized } } },
+      });
+      const match = result.data.charts?.[0];
+      if (!match) {
+        setJoinState({ status: "error", message: "No chart found with that code." });
+        return;
+      }
+      const alreadyMember = charts.some((c) => c.id === match.id);
+      if (alreadyMember) {
+        setJoinState({ status: "idle" });
+        setJoinCode("");
+        navigate(`/charts/${match.id}`);
+        return;
+      }
+      await db.transact(db.tx.charts[match.id].link({ members: user.id }));
+      setJoinState({ status: "idle" });
+      setJoinCode("");
+      navigate(`/charts/${match.id}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Couldn't join — try again.";
+      setJoinState({ status: "error", message });
     }
   };
 
-  const cancelNameEdit = () => {
-    setEditingName(false);
-    setNameInput("");
-  };
+  const submittingJoin = joinState.status === "submitting";
 
   return (
     <div style={{ position: "absolute", inset: 0, color: "var(--sc-fg)", overflow: "hidden" }}>
@@ -155,11 +140,6 @@ export default function Dashboard() {
 
       <div
         style={{
-          // Overlay the content directly on the Sky background. Without
-          // explicit positioning the content div was a normal-flow sibling
-          // of <Sky/> (min-height: 100vh) and got pushed *below* the
-          // viewport, then clipped by overflow:hidden — the page rendered
-          // as a starfield with all UI offscreen.
           position: "absolute",
           inset: 0,
           overflowY: "auto",
@@ -170,68 +150,24 @@ export default function Dashboard() {
       >
         <header style={headerStyle}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ ...eyebrowStyle, color: "var(--sc-gold)" }}>your group</span>
-            {editingName ? (
-              <input
-                ref={nameInputRef}
-                value={nameInput}
-                onChange={(e) => setNameInput(e.target.value)}
-                onBlur={commitNameEdit}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") commitNameEdit();
-                  if (e.key === "Escape") cancelNameEdit();
-                }}
-                style={{
-                  margin: 0,
-                  fontFamily: "var(--sc-serif)",
-                  fontWeight: "var(--sc-serif-weight, 500)" as CSSProperties["fontWeight"],
-                  fontSize: 26,
-                  lineHeight: 1.1,
-                  letterSpacing: "-0.005em",
-                  background: "transparent",
-                  border: "none",
-                  borderBottom: "2px solid var(--sc-gold)",
-                  color: "var(--sc-fg)",
-                  outline: "none",
-                  padding: "0 2px",
-                  width: `${Math.max(nameInput.length, 4)}ch`,
-                  minWidth: 120,
-                  maxWidth: 400,
-                }}
-              />
-            ) : (
-              <h1
-                onClick={startEditingName}
-                title="Click to rename"
-                style={{
-                  margin: 0,
-                  fontFamily: "var(--sc-serif)",
-                  fontWeight: "var(--sc-serif-weight, 500)" as CSSProperties["fontWeight"],
-                  fontSize: 26,
-                  lineHeight: 1.1,
-                  letterSpacing: "-0.005em",
-                  cursor: "text",
-                }}
-              >
-                {group.name}
-              </h1>
-            )}
+            <span style={{ ...eyebrowStyle, color: "var(--sc-gold)" }}>your sky</span>
+            <h1
+              style={{
+                margin: 0,
+                fontFamily: "var(--sc-serif)",
+                fontWeight: "var(--sc-serif-weight, 500)" as CSSProperties["fontWeight"],
+                fontSize: 26,
+                lineHeight: 1.1,
+                letterSpacing: "-0.005em",
+              }}
+            >
+              {user.displayName}
+            </h1>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-            <MemberDots members={members} showCount />
-            <button
-              type="button"
-              onClick={copyInvite}
-              style={inviteCapsule}
-              title="Click to copy invite code"
-            >
-              {copied ? "copied!" : `Invite: ${group.inviteCode}`}
-            </button>
-            <button type="button" onClick={handleSignOut} style={signOutBtn}>
-              Sign out
-            </button>
-          </div>
+          <button type="button" onClick={handleSignOut} style={signOutBtn}>
+            Sign out
+          </button>
         </header>
 
         <main
@@ -240,7 +176,7 @@ export default function Dashboard() {
             padding: "24px 24px 40px",
             display: "flex",
             flexDirection: "column",
-            gap: 16,
+            gap: 24,
           }}
         >
           {!chartsLoading && charts.length === 0 ? (
@@ -292,6 +228,92 @@ export default function Dashboard() {
               ))}
             </div>
           )}
+
+          <div
+            style={{
+              maxWidth: 420,
+              background: "var(--sc-surface)",
+              border: "1px solid var(--sc-stroke)",
+              borderRadius: 14,
+              padding: "18px 20px",
+              backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
+            }}
+          >
+            <p
+              style={{
+                margin: "0 0 12px",
+                fontFamily: "var(--sc-sans)",
+                fontSize: 11,
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                color: "var(--sc-fg-muted)",
+              }}
+            >
+              Join a chart
+            </p>
+            <form onSubmit={handleJoin} style={{ display: "flex", gap: 8 }}>
+              <input
+                type="text"
+                placeholder="Invite code"
+                value={joinCode}
+                onChange={(e) => {
+                  setJoinCode(e.target.value);
+                  if (joinState.status === "error") setJoinState({ status: "idle" });
+                }}
+                disabled={submittingJoin}
+                maxLength={8}
+                autoComplete="off"
+                autoCapitalize="characters"
+                style={{
+                  flex: 1,
+                  background: "var(--sc-surface-solid)",
+                  border: "1px solid var(--sc-stroke)",
+                  borderRadius: 10,
+                  padding: "8px 12px",
+                  color: "var(--sc-fg)",
+                  fontFamily: "var(--sc-sans)",
+                  fontSize: 14,
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  outline: "none",
+                }}
+              />
+              <button
+                type="submit"
+                disabled={submittingJoin || joinCode.trim().length === 0}
+                style={{
+                  background: "var(--sc-gold)",
+                  color: "#1a1106",
+                  border: "none",
+                  borderRadius: 10,
+                  padding: "8px 16px",
+                  fontFamily: "var(--sc-sans)",
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: submittingJoin ? "wait" : "pointer",
+                  opacity: submittingJoin || joinCode.trim().length === 0 ? 0.55 : 1,
+                  transition: "opacity 120ms ease",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {submittingJoin ? "Joining…" : "Join"}
+              </button>
+            </form>
+            {joinState.status === "error" && (
+              <p
+                style={{
+                  margin: "8px 0 0",
+                  fontFamily: "var(--sc-serif)",
+                  fontStyle: "italic",
+                  fontSize: 13,
+                  color: "var(--sc-fg-muted)",
+                }}
+              >
+                {joinState.message}
+              </p>
+            )}
+          </div>
         </main>
       </div>
     </div>

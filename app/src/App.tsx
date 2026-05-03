@@ -5,7 +5,6 @@ import { Sigil } from "./components/Sigil";
 
 import SignIn from "./screens/SignIn";
 import ProfileSetup from "./screens/ProfileSetup";
-import GroupSetup from "./screens/GroupSetup";
 import Dashboard from "./screens/Dashboard";
 import CreateChart from "./screens/CreateChart";
 import ChartSky from "./screens/ChartSky";
@@ -23,7 +22,6 @@ export function App() {
           <Route path="/" element={<Navigate to="/sign-in" replace />} />
           <Route path="/sign-in" element={<SignIn />} />
           <Route path="/profile-setup" element={<ProfileSetup />} />
-          <Route path="/group-setup" element={<GroupSetup />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/charts/new" element={<CreateChart />} />
           <Route path="/charts/:id" element={<ChartSky />} />

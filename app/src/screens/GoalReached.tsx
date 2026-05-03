@@ -12,7 +12,6 @@ import { Sky } from "../components/Sky";
 import { LoadingSky } from "../components/LoadingSky";
 import { Star } from "../components/Star";
 import { useCurrentUser } from "../hooks/useCurrentUser";
-import { useCurrentGroup } from "../hooks/useCurrentGroup";
 import { useChart } from "../hooks/useChart";
 import { useGiftsForChart } from "../hooks/useGiftsForChart";
 import { expandClusterPositions } from "../lib/starPositioning";
@@ -34,7 +33,6 @@ export default function GoalReached() {
   const prefersReducedMotion = useReducedMotion();
 
   const { user, isLoading: userLoading } = useCurrentUser();
-  const { group, isLoading: groupLoading } = useCurrentGroup();
   const { chart, isLoading: chartLoading } = useChart(chartId);
   const { gifts } = useGiftsForChart(chartId);
 
@@ -44,13 +42,6 @@ export default function GoalReached() {
       navigate("/sign-in", { replace: true });
     }
   }, [userLoading, user, navigate]);
-
-  // Group gate.
-  useEffect(() => {
-    if (!userLoading && user && !groupLoading && !group) {
-      navigate("/group-setup", { replace: true });
-    }
-  }, [userLoading, user, groupLoading, group, navigate]);
 
   // Chart gate: missing chart bounces to dashboard.
   useEffect(() => {
@@ -89,14 +80,7 @@ export default function GoalReached() {
     );
   }, [gifts]);
 
-  if (
-    userLoading ||
-    !user ||
-    groupLoading ||
-    !group ||
-    chartLoading ||
-    !chart
-  ) {
+  if (userLoading || !user || chartLoading || !chart) {
     return <LoadingSky />;
   }
 
