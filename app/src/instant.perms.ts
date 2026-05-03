@@ -43,6 +43,22 @@
 //                direct read access to `groups`. Closing this rule
 //                is what makes group enumeration impractical from
 //                the public app.
+//
+//   2026-05-03 — tightened groups.update + charts.update via
+//                `request.modifiedFields.all(field, field == '<X>')`.
+//                Earlier attempts at field-immutability used
+//                `newData.X == data.X` but failed against partial
+//                updates (the goal-reached `update({completedAt})`
+//                only puts `completedAt` in newData; unchanged
+//                fields read as null and the equality check
+//                rejected them). The `modifiedFields` quantifier
+//                expresses immutability without hitting that
+//                edge: a `tx.update({name: …})` puts only `name`
+//                in the set; the rule passes only when every
+//                element is the allowed field. Now `groups.update`
+//                rejects any change other than `name`, and
+//                `charts.update` rejects any change other than
+//                `completedAt`.
 
 import type { InstantRules } from "@instantdb/react";
 
@@ -94,17 +110,18 @@ const rules = {
       // write proxy with admin auth would close this for real.
       create: "auth.id != null",
 
-      // Members can rename their group, but inviteCode and
-      // createdAt are immutable after creation. Without the
-      // equality clauses below, any member could rotate the invite
-      // code (breaking the join flow for everyone else) or rewrite
-      // the group's birthday. Lock both fields by requiring the
-      // proposed value to equal the current value.
+      // Members can rename their group, but `inviteCode` and
+      // `createdAt` are immutable after creation — without this,
+      // any member could rotate the invite code (breaking the
+      // join flow for everyone else) or rewrite the group's
+      // birthday. Uses InstantDB's `request.modifiedFields` set
+      // so partial updates work cleanly: a `tx.update({name:…})`
+      // sets `modifiedFields = ['name']`, and the rule passes only
+      // if every entry in that set is `name`.
       update:
         "auth.id != null && " +
         "auth.id in data.ref('members.id') && " +
-        "newData.inviteCode == data.inviteCode && " +
-        "newData.createdAt == data.createdAt",
+        "request.modifiedFields.all(field, field == 'name')",
 
       // No client-side group deletion in v1.
       delete: "false",
@@ -130,17 +147,20 @@ const rules = {
       // immediately after creation.
       create: "auth.id != null",
 
-      // Members can update. Tried locking everything except
-      // `completedAt` via `newData.X == data.X` clauses, but the
-      // goal-reached transact (chart.update with only completedAt
-      // set) failed against those equality checks — InstantDB's
-      // `newData` for a partial update may not echo back the
-      // unchanged fields the way the rule expected. Reverted to
-      // simple membership-only until the partial-update semantics
-      // are nailed down. Tighter immutability of name/goalCount/
-      // reward/createdAt belongs in a Worker write proxy or in a
-      // link-rule pattern.
-      update: "auth.id != null && auth.id in data.ref('group.members.id')",
+      // Members can update — but only the `completedAt` field is
+      // mutable. The rest of a chart (name, goalCount, reward,
+      // createdAt) is set at creation and stays put. This uses
+      // `request.modifiedFields.all(...)` so a partial-update
+      // transact works cleanly: the only path the SPA uses is the
+      // goal-reached write `update({completedAt: now})`, which
+      // sets `modifiedFields = ['completedAt']` and passes the
+      // quantifier. An attempt to retroactively change `goalCount`
+      // would fail because that field would also appear in
+      // `modifiedFields`.
+      update:
+        "auth.id != null && " +
+        "auth.id in data.ref('group.members.id') && " +
+        "request.modifiedFields.all(field, field == 'completedAt')",
 
       // Charts are not deletable in v1 — completed charts become
       // memories per the design brief.
