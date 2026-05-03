@@ -2,6 +2,12 @@ name = "starcharts-summon"
 main = "src/index.ts"
 compatibility_date = "2026-05-03"
 
+# Keep the workers.dev fallback URL alive (LAN smoke tests, manual
+# debugging when summon.stars.realm.watch is acting up). Newer
+# wrangler defaults to false; we explicitly opt in.
+workers_dev = true
+preview_urls = true
+
 # Workers Logs (real-time tail + persisted logs in dashboard).
 [observability]
 enabled = true

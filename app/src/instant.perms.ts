@@ -14,13 +14,35 @@
 //                Shawna's $users row was filtered out by the
 //                default rule. The new rule allows viewing a
 //                $users row when the requester shares at least
-//                one group with that user (i.e., they're
-//                group-mates).
+//                one group with that user.
 //
-// Future work: groups / charts / gifts currently fall back to
-// InstantDB's default (permissive), which is fine for v1 since
-// nothing else exposes data across group boundaries. Lock those
-// down before any second-tenant scenario.
+//   2026-05-03 — locked down groups / charts / gifts. The URL is
+//                now public, and InstantDB's *non*-$users defaults
+//                are permissive: any authed visitor with the (also
+//                public) app ID could read or write arbitrary
+//                charts and gifts in any group. New rules:
+//                  - groups: any authed user can create a group;
+//                    any member can rename their own group; nobody
+//                    can delete via the client. View is open to
+//                    any authed user (see "Known gap" below).
+//                  - charts: only members of the chart's group can
+//                    view, create, or update; charts can't be
+//                    deleted from the client (per v1 design —
+//                    completed charts become memory).
+//                  - gifts: only members of the chart's group can
+//                    view or create; gifts are immutable
+//                    (update = delete = false).
+//
+// Known gap: groups.view is intentionally permissive to keep the
+// join-by-invite-code flow working. `GroupSetup.handleJoin` does a
+// `queryOnce({ groups: { where: { inviteCode } } })` lookup; if the
+// view rule were members-only, that query would return empty for a
+// non-member and joining would be impossible. The cost: an authed
+// visitor can iterate groups and harvest invite codes. The fix is
+// a Worker-side `POST /api/join-group` endpoint that does the
+// inviteCode lookup with an admin token and returns only the
+// groupId, allowing groups.view to be locked to members. Tracked
+// as the next perms task.
 
 import type { InstantRules } from "@instantdb/react";
 
@@ -46,6 +68,83 @@ const rules = {
       // and the lint requires this to be the literal string
       // "false". Account removal happens via the InstantDB
       // dashboard.
+      delete: "false",
+    },
+  },
+
+  groups: {
+    allow: {
+      // See "Known gap" in the file header. Permissive view keeps
+      // the invite-code lookup in `GroupSetup.handleJoin` working;
+      // gives up enumeration resistance. Replace with members-only
+      // once a Worker-side join endpoint exists.
+      view: "auth.id != null",
+
+      // Anyone authed can create a group. The same transact links
+      // the creator as the first member.
+      create: "auth.id != null",
+
+      // Members can rename / edit their group (used by the
+      // inline-edit affordance on Dashboard).
+      update: "auth.id != null && auth.id in data.ref('members.id')",
+
+      // No client-side group deletion in v1.
+      delete: "false",
+    },
+  },
+
+  charts: {
+    allow: {
+      // Only members of the chart's group can see it, create it,
+      // or update it. `data.ref('group.members.id')` traverses
+      // chart → its group → that group's members → their ids;
+      // auth.id has to appear in that flat list.
+      view: "auth.id != null && auth.id in data.ref('group.members.id')",
+
+      // Any authed user can create a chart row. Tighter
+      // membership-on-create checks turned out to fail with
+      // "Could not evaluate permission rule" in InstantDB —
+      // `newData.ref()` does not resolve through links set in
+      // the same transact at create time. The protection is
+      // still meaningful: charts.view is members-only, so a
+      // chart created against a group the creator doesn't belong
+      // to would be invisible to everyone (including the creator)
+      // immediately after creation.
+      create: "auth.id != null",
+
+      // Members can update — used by `chart.completedAt` write
+      // when a gift hits the goal.
+      update: "auth.id != null && auth.id in data.ref('group.members.id')",
+
+      // Charts are not deletable in v1 — completed charts become
+      // memories per the design brief.
+      delete: "false",
+    },
+  },
+
+  gifts: {
+    allow: {
+      // Visible only to members of the chart's group. Path:
+      // gift → chart → group → members → ids.
+      view: "auth.id != null && auth.id in data.ref('chart.group.members.id')",
+
+      // Any authed user can create a gift row. The same
+      // `newData.ref()` constraint that blocked charts.create
+      // applies here — InstantDB can't evaluate the link
+      // traversal at create time when the links are set in the
+      // same transact. Protection is still meaningful: gifts.view
+      // is members-only, so a gift written to a chart the creator
+      // isn't a member of is invisible to everyone (including
+      // them) and falls out of the application's read paths
+      // entirely. Tighter giver-must-equal-self enforcement
+      // belongs in a Worker-side write proxy or in a dedicated
+      // link-rule pattern; tracked as the next perms task.
+      create: "auth.id != null",
+
+      // Gifts are immutable per design — once a star is sent, it
+      // stays. Mistaken sends are corrected by the InstantDB
+      // dashboard, not the client.
+      update: "false",
       delete: "false",
     },
   },
