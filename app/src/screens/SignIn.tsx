@@ -10,7 +10,12 @@
 // If the user is already signed in (IndexedDB session survives reload),
 // we skip the form entirely and bounce to /dashboard.
 
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useState,
+  type ClipboardEvent,
+  type FormEvent,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import { Sky } from "../components/Sky";
 import { LoadingSky } from "../components/LoadingSky";
@@ -19,6 +24,14 @@ import { useCurrentUser } from "../hooks/useCurrentUser";
 
 type Step = "email" | "code";
 type Status = "idle" | "submitting";
+
+const CODE_LENGTH = 6;
+
+// Strip everything that isn't a digit, then cap to the code length.
+// Handles people pasting "  4 3 5 - 0 4 5 " out of the email.
+function normalizeCode(raw: string): string {
+  return raw.replace(/\D+/g, "").slice(0, CODE_LENGTH);
+}
 
 export default function SignIn() {
   const navigate = useNavigate();
@@ -61,24 +74,57 @@ export default function SignIn() {
     }
   }
 
-  async function handleCodeSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function submitCode(value: string) {
     if (status === "submitting") return;
-    const trimmed = code.trim();
-    if (!trimmed) {
-      setErrorMessage("Enter the code we just sent.");
+    if (value.length !== CODE_LENGTH) {
+      setErrorMessage(`Codes are ${CODE_LENGTH} digits — paste or type the one we sent.`);
       return;
     }
     setStatus("submitting");
     setErrorMessage(null);
     try {
-      await signInWithCode(email, trimmed);
+      await signInWithCode(email, value);
       navigate("/dashboard", { replace: true });
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "That code didn't work — try again.";
-      setErrorMessage(message);
+      setErrorMessage(
+        message.toLowerCase().includes("expire")
+          ? "That code expired. Send a fresh one."
+          : message,
+      );
       setStatus("idle");
+    }
+  }
+
+  function handleCodeSubmit(e: FormEvent) {
+    e.preventDefault();
+    void submitCode(code);
+  }
+
+  // Paste support: people grab "  4 3 5 0 4 5 " out of the email; we
+  // strip everything non-digit and then auto-submit if the result is
+  // a clean 6-digit code. Without this, the user has to also press
+  // Sign in after pasting, which feels clunky.
+  function handleCodePaste(e: ClipboardEvent<HTMLInputElement>) {
+    const pasted = normalizeCode(e.clipboardData.getData("text"));
+    if (pasted.length === 0) return;
+    e.preventDefault();
+    setCode(pasted);
+    setErrorMessage(null);
+    if (pasted.length === CODE_LENGTH) {
+      void submitCode(pasted);
+    }
+  }
+
+  // Typed input (one digit at a time): trigger the same auto-submit
+  // when the user reaches the full length, so they don't need to also
+  // hit the button.
+  function handleCodeChange(value: string) {
+    const cleaned = normalizeCode(value);
+    setCode(cleaned);
+    if (cleaned.length === CODE_LENGTH && status === "idle") {
+      void submitCode(cleaned);
     }
   }
 
@@ -102,14 +148,20 @@ export default function SignIn() {
     <Sky>
       <main style={mainStyle}>
         <section style={panelStyle}>
-          <p style={eyebrowStyle}>starcharts</p>
+          <p style={eyebrowStyle}>Starcharts</p>
           <h1 style={headlineStyle}>
             {step === "email" ? "Welcome to your sky." : "Check your email."}
           </h1>
           <p style={subStyle}>
             {step === "email"
               ? "Sign in with the email you'll use with your group."
-              : `We sent a code to ${email}.`}
+              : (
+                <>
+                  We sent a 6-digit code to <strong style={emphasisStyle}>{email}</strong>.
+                  <br />
+                  It expires in a few minutes — paste it here.
+                </>
+              )}
           </p>
 
           {step === "email" ? (
@@ -151,23 +203,24 @@ export default function SignIn() {
                 id="signin-code"
                 type="text"
                 inputMode="numeric"
+                pattern="[0-9]*"
                 autoComplete="one-time-code"
                 autoCorrect="off"
                 spellCheck={false}
                 required
                 autoFocus
                 value={code}
-                onChange={(e) =>
-                  setCode(e.target.value.replace(/\s+/g, ""))
-                }
+                onChange={(e) => handleCodeChange(e.target.value)}
+                onPaste={handleCodePaste}
                 disabled={submitting}
                 placeholder="••••••"
-                maxLength={12}
+                maxLength={CODE_LENGTH}
                 style={{
                   ...inputStyle,
-                  letterSpacing: "0.4em",
+                  letterSpacing: "0.5em",
                   textAlign: "center",
-                  fontSize: "1.1rem",
+                  fontSize: "1.4rem",
+                  fontVariantNumeric: "tabular-nums",
                 }}
               />
               {errorMessage && <p style={errorStyle}>{errorMessage}</p>}
@@ -232,6 +285,12 @@ const headlineStyle: React.CSSProperties = {
   margin: 0,
   lineHeight: 1.05,
   color: "var(--sc-fg)",
+};
+
+const emphasisStyle: React.CSSProperties = {
+  fontStyle: "normal",
+  color: "var(--sc-fg)",
+  fontWeight: 500,
 };
 
 const subStyle: React.CSSProperties = {
