@@ -11,7 +11,9 @@
   },
   "dependencies": {
     "@instantdb/react": "^1.0.22",
+    "@react-spring/web": "^10.0.3",
     "framer-motion": "^12.38.0",
+    "lottie-react": "^2.4.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router-dom": "^7.14.2"
