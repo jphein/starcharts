@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Starcharts — OG card source</title>
+    <!--
+      Source for the 1200×630 social-share image rendered to
+      app/public/og.png. To regenerate after editing this file:
+
+        1. cd app && npm run dev
+        2. From repo root, with Playwright + Chromium installed:
+           npx playwright screenshot \
+             --viewport-size=1200,630 \
+             --wait-for-timeout=400 \
+             scripts/og-source.html \
+             app/public/og.png
+
+      (Or open scripts/og-source.html directly in a 1200×630
+      browser window and save a screenshot manually.)
+
+      The font swap delay is why we wait 400ms — without it the
+      headline can render in the system fallback.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@400;500&display=swap"
+    />
+    <style>
+      :root {
+        --gold: #f3c46b;
+        --fg: #f4f1e6;
+        --fg-muted: rgba(244, 241, 230, 0.7);
+        --fg-faint: rgba(244, 241, 230, 0.4);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        width: 1200px;
+        height: 630px;
+        background:
+          radial-gradient(ellipse at 18% 22%, rgba(120, 60, 180, 0.25), transparent 55%),
+          radial-gradient(ellipse at 82% 78%, rgba(40, 110, 170, 0.22), transparent 55%),
+          radial-gradient(ellipse at 50% 100%, #101536, #04061a);
+        color: var(--fg);
+        font-family: "Cormorant Garamond", Georgia, serif;
+        position: relative;
+        overflow: hidden;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Hand-placed dust + stars; no JS so the screenshot is deterministic. */
+      .dust span {
+        position: absolute;
+        background: var(--fg);
+        border-radius: 50%;
+        opacity: 0.55;
+      }
+      .glint {
+        position: absolute;
+        font-family: "Cormorant Garamond", serif;
+        color: var(--gold);
+        opacity: 0.85;
+        text-shadow: 0 0 12px rgba(243, 196, 107, 0.55);
+      }
+
+      .stage {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        padding: 60px;
+      }
+      .eyebrow {
+        font-family: "Inter", system-ui, sans-serif;
+        font-size: 13px;
+        letter-spacing: 0.4em;
+        text-transform: uppercase;
+        color: var(--gold);
+        margin-bottom: 22px;
+      }
+      .wordmark {
+        font-family: "Cormorant Garamond", serif;
+        font-weight: 500;
+        font-size: 132px;
+        line-height: 1;
+        letter-spacing: -0.012em;
+        margin: 0;
+        background: linear-gradient(180deg, #ffffff 0%, var(--gold) 78%, #c89b3c 110%);
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent;
+        text-shadow: 0 8px 40px rgba(243, 196, 107, 0.18);
+      }
+      .tagline {
+        margin-top: 28px;
+        font-family: "Cormorant Garamond", serif;
+        font-style: italic;
+        font-size: 32px;
+        color: var(--fg-muted);
+        max-width: 880px;
+        line-height: 1.35;
+      }
+      .url {
+        position: absolute;
+        bottom: 38px;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-family: "Inter", system-ui, sans-serif;
+        font-size: 14px;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+        color: var(--fg-faint);
+      }
+      .url::before { content: "✦   "; color: var(--gold); }
+      .url::after  { content: "   ✦"; color: var(--gold); }
+    </style>
+  </head>
+  <body>
+    <!-- Background dust motes (16) + handful of bright glints. -->
+    <div class="dust">
+      <span style="top: 8%; left: 12%; width: 2px; height: 2px;"></span>
+      <span style="top: 14%; left: 78%; width: 3px; height: 3px;"></span>
+      <span style="top: 22%; left: 30%; width: 2px; height: 2px;"></span>
+      <span style="top: 30%; left: 8%; width: 2px; height: 2px;"></span>
+      <span style="top: 32%; left: 92%; width: 2px; height: 2px;"></span>
+      <span style="top: 40%; left: 65%; width: 3px; height: 3px;"></span>
+      <span style="top: 48%; left: 18%; width: 2px; height: 2px;"></span>
+      <span style="top: 52%; left: 88%; width: 2px; height: 2px;"></span>
+      <span style="top: 60%; left: 6%; width: 2px; height: 2px;"></span>
+      <span style="top: 64%; left: 72%; width: 3px; height: 3px;"></span>
+      <span style="top: 72%; left: 42%; width: 2px; height: 2px;"></span>
+      <span style="top: 78%; left: 14%; width: 2px; height: 2px;"></span>
+      <span style="top: 80%; left: 86%; width: 3px; height: 3px;"></span>
+      <span style="top: 86%; left: 28%; width: 2px; height: 2px;"></span>
+      <span style="top: 88%; left: 62%; width: 2px; height: 2px;"></span>
+      <span style="top: 92%; left: 50%; width: 2px; height: 2px;"></span>
+    </div>
+
+    <span class="glint" style="top: 11%; left: 22%; font-size: 26px;">✦</span>
+    <span class="glint" style="top: 18%; left: 84%; font-size: 22px; opacity: 0.7;">✦</span>
+    <span class="glint" style="top: 76%; left: 9%;  font-size: 28px; opacity: 0.75;">✦</span>
+    <span class="glint" style="top: 82%; left: 90%; font-size: 24px; opacity: 0.65;">✦</span>
+
+    <div class="stage">
+      <div class="eyebrow">A shared night sky</div>
+      <h1 class="wordmark">Starcharts</h1>
+      <p class="tagline">
+        Give each other stars for meaningful acts.<br />
+        When the sky fills, the chart becomes a memory.
+      </p>
+    </div>
+
+    <div class="url">stars.realm.watch</div>
+  </body>
+</html>
