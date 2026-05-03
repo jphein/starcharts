@@ -7,11 +7,15 @@
 // Hover/tap: the badge expands to reveal branch, build time, and a
 // link to the GitHub commit. The ✦ pulses gently as a "live" cue;
 // the pulse is suppressed under prefers-reduced-motion (CSS module
-// handles that — no JS gating needed).
+// handles that — no JS gating needed). The closed panel uses `inert`
+// so its link doesn't catch keyboard tab focus while collapsed.
 //
 // Reads `/version.json` once on mount. The file is written by
-// `app/scripts/version.mjs` during prebuild and is the realm-sigil
-// source of truth for what's deployed.
+// `app/scripts/version.mjs` and is the realm-sigil source of truth
+// for what's deployed. `predev` and `prebuild` both run the writer
+// so the file is present in dev too. If it's still missing for any
+// reason (mid-rebuild, broken deploy), we render a defensive "dev"
+// sigil so the absence is loud, not silent.
 
 import { useEffect, useState } from "react";
 import styles from "./Sigil.module.css";
@@ -27,8 +31,20 @@ interface VersionInfo {
   repo: string;
 }
 
+const FALLBACK: VersionInfo = {
+  name: "starcharts",
+  version: "0.0.0",
+  hash: "dev",
+  branch: "?",
+  dirty: true,
+  built: new Date().toISOString(),
+  realm: "stellar",
+  repo: "https://github.com/jphein/starcharts",
+};
+
 export function Sigil() {
   const [info, setInfo] = useState<VersionInfo | null>(null);
+
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -37,10 +53,11 @@ export function Sigil() {
     fetch(url, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((v: VersionInfo | null) => {
-        if (alive && v) setInfo(v);
+        if (!alive) return;
+        setInfo(v ?? FALLBACK);
       })
       .catch(() => {
-        // Silent — sigil just stays hidden if the file is unreachable.
+        if (alive) setInfo(FALLBACK);
       });
     return () => {
       alive = false;
@@ -83,7 +100,16 @@ export function Sigil() {
         </span>
       </button>
 
-      <div className={styles.panel} role="group" aria-hidden={!open}>
+      <div
+        className={styles.panel}
+        role="group"
+        aria-hidden={!open}
+        // `inert` removes the panel's children (notably the GitHub
+        // link) from the tab order and accessibility tree while
+        // collapsed — matches the visual hidden state. Universally
+        // supported in evergreen browsers since 2023.
+        inert={!open}
+      >
         <p className={styles.line}>
           <span className={styles.label}>realm</span>
           <span className={styles.value}>{info.realm}</span>
