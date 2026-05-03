@@ -564,8 +564,8 @@ to a "your sky is full for today" panel with a *Pick a preset
 instead* affordance. No console error, no toast.
 
 Content moderation is intentionally **not** done in the Worker —
-Azure's content filter is the source of truth. See
-`feedback-content-moderation.md` in memory.
+Azure's content filter is the source of truth for what's allowed
+through the model. The Worker only validates length and charset.
 
 ---
 

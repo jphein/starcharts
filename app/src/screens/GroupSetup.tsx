@@ -115,7 +115,7 @@ export default function GroupSetup() {
     <Sky>
       <main style={mainStyle}>
         <section style={panelStyle}>
-          <p style={eyebrowStyle}>starcharts</p>
+          <p style={eyebrowStyle}>Starcharts</p>
           <h1 style={headlineStyle}>Find your group</h1>
           <p style={subStyle}>
             Create a new group, or join one with an invite code.
