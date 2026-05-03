@@ -2,9 +2,18 @@
 //
 // Returns a non-loading empty result when chartId is undefined so callers
 // can render the page skeleton without branching on a missing-id state.
+// Invalid UUIDs are treated the same as "chart not found" — the chart-gate
+// effect in each consumer redirects to /dashboard.
 
 import { db } from "../db/client";
 import type { Chart } from "../types";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(s: string | undefined): s is string {
+  return typeof s === "string" && UUID_RE.test(s);
+}
 
 interface UseChartResult {
   chart: Chart | null;
@@ -12,8 +21,10 @@ interface UseChartResult {
 }
 
 export function useChart(chartId: string | undefined): UseChartResult {
+  const valid = isUuid(chartId);
+
   const result = db.useQuery(
-    chartId
+    valid
       ? {
           charts: {
             $: { where: { id: chartId } },
@@ -22,7 +33,7 @@ export function useChart(chartId: string | undefined): UseChartResult {
       : null,
   );
 
-  if (!chartId) {
+  if (!valid) {
     return { chart: null, isLoading: false };
   }
   if (result.isLoading) {

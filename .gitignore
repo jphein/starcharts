@@ -35,3 +35,10 @@ Star Charts.zip
 # Logs
 *.log
 npm-debug.log*
+app/public/version.json
+
+# Cloudflare Worker local-dev secrets
+worker/.dev.vars
+worker/node_modules/
+worker/dist/
+worker/.wrangler/

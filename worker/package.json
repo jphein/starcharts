@@ -1,0 +1,17 @@
+{
+  "name": "starcharts-summon",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloudflare Worker proxy from the Starcharts app to Azure AI Foundry gpt-image-1.5, storing generated PNGs in R2.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260101.0",
+    "typescript": "^5.6.0",
+    "wrangler": "^3.90.0"
+  }
+}

@@ -17,6 +17,7 @@ import { AnimatePresence } from "framer-motion";
 import { Sky } from "../components/Sky";
 import { Star } from "../components/Star";
 import { GiftCard } from "../components/GiftCard";
+import { PresencePanel } from "../components/PresencePanel";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useCurrentGroup } from "../hooks/useCurrentGroup";
 import { useChart } from "../hooks/useChart";
@@ -142,10 +143,13 @@ export default function ChartSky() {
           <h1 style={titleStyle}>{chart.name}</h1>
         </div>
 
-        <div style={progressStyle} aria-label="Star progress">
-          <span style={progressNumStyle}>{totalCount}</span>
-          <span style={progressSepStyle}> / </span>
-          <span style={progressNumStyle}>{chart.goalCount}</span>
+        <div style={trailingStyle}>
+          <PresencePanel chartId={chart.id} />
+          <div style={progressStyle} aria-label="Star progress">
+            <span style={progressNumStyle}>{totalCount}</span>
+            <span style={progressSepStyle}> / </span>
+            <span style={progressNumStyle}>{chart.goalCount}</span>
+          </div>
         </div>
       </header>
 
@@ -237,6 +241,13 @@ const titleStyle: CSSProperties = {
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
+};
+
+const trailingStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 12,
+  flexShrink: 0,
 };
 
 const progressStyle: CSSProperties = {

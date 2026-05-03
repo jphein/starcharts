@@ -27,9 +27,12 @@ import { useChart } from "../hooks/useChart";
 import { useGiftsForChart } from "../hooks/useGiftsForChart";
 import { pickGiftAnchor } from "../lib/starPositioning";
 import { presetUrl } from "../lib/presets";
+import { summonStashKey } from "./SummonFlow";
 import type { User } from "../types";
 
 type Step = "honorees" | "reason" | "preset" | "confirm";
+
+const CUSTOM_STYLE = "custom";
 
 type SubmitState =
   | { status: "idle" | "submitting" }
@@ -71,10 +74,40 @@ export default function GiftFlow() {
   const [honoreeIds, setHonoreeIds] = useState<string[]>([]);
   const [reason, setReason] = useState("");
   const [style, setStyle] = useState<string | null>(null);
+  const [customImageUrl, setCustomImageUrl] = useState<string | null>(null);
   const [count, setCount] = useState<number>(1);
   const [submitState, setSubmitState] = useState<SubmitState>({
     status: "idle",
   });
+
+  // Hydrate a summoned custom star if SummonFlow stashed one for this chart.
+  // Pre-selects style="custom" and jumps to the preset step; consume the entry
+  // so a refresh won't re-apply it.
+  useEffect(() => {
+    if (!chartId) return;
+    let raw: string | null = null;
+    try {
+      raw = window.sessionStorage.getItem(summonStashKey(chartId));
+    } catch {
+      return;
+    }
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as { url?: string };
+      if (parsed?.url) {
+        setStyle(CUSTOM_STYLE);
+        setCustomImageUrl(parsed.url);
+        setStep("preset");
+      }
+    } catch {
+      // Malformed — ignore.
+    }
+    try {
+      window.sessionStorage.removeItem(summonStashKey(chartId));
+    } catch {
+      // best-effort.
+    }
+  }, [chartId]);
 
   // Auth gate.
   useEffect(() => {
@@ -160,12 +193,17 @@ export default function GiftFlow() {
       );
       const newId = id();
 
+      const starImageUrl =
+        style === CUSTOM_STYLE && customImageUrl
+          ? customImageUrl
+          : presetUrl(style);
+
       const giftOp = db.tx.gifts[newId]
         .update({
           reason: trimmedReason,
           count,
           style,
-          starImageUrl: presetUrl(style),
+          starImageUrl,
           x: anchor.x,
           y: anchor.y,
           createdAt: Date.now(),
@@ -261,7 +299,20 @@ export default function GiftFlow() {
           {step === "preset" && (
             <PresetStep
               selected={style}
-              onSelect={setStyle}
+              onSelect={(slug) => {
+                setStyle(slug);
+                if (slug !== CUSTOM_STYLE) {
+                  setCustomImageUrl(null);
+                }
+              }}
+              customImageUrl={customImageUrl}
+              onClearCustom={() => {
+                setStyle(null);
+                setCustomImageUrl(null);
+              }}
+              onSummon={() =>
+                chartId && navigate(`/charts/${chartId}/summon`)
+              }
               count={count}
               onCountChange={setCount}
             />
@@ -272,6 +323,7 @@ export default function GiftFlow() {
               honorees={otherMembers.filter((m) => honoreeSet.has(m.id))}
               reason={trimmedReason}
               style={style!}
+              customImageUrl={customImageUrl}
               count={count}
             />
           )}
@@ -415,17 +467,63 @@ function ReasonInput({
 function PresetStep({
   selected,
   onSelect,
+  customImageUrl,
+  onClearCustom,
+  onSummon,
   count,
   onCountChange,
 }: {
   selected: string | null;
   onSelect: (slug: string) => void;
+  customImageUrl: string | null;
+  onClearCustom: () => void;
+  onSummon: () => void;
   count: number;
   onCountChange: (n: number) => void;
 }) {
+  const showingCustom = selected === CUSTOM_STYLE && customImageUrl;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <PresetGallery selected={selected} onSelect={onSelect} />
+      {showingCustom ? (
+        <div style={customPreviewWrapStyle}>
+          <img
+            src={customImageUrl}
+            alt="Your summoned star"
+            draggable={false}
+            style={customPreviewImgStyle}
+          />
+          <p style={customPreviewLabelStyle}>your summoned star</p>
+          <div style={customPreviewLinksStyle}>
+            <button
+              type="button"
+              onClick={onClearCustom}
+              style={inlineLinkStyle}
+            >
+              use a different star
+            </button>
+            <span style={inlineDotStyle}>·</span>
+            <button
+              type="button"
+              onClick={onSummon}
+              style={inlineLinkStyle}
+            >
+              summon another
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <PresetGallery selected={selected} onSelect={onSelect} />
+          <button
+            type="button"
+            onClick={onSummon}
+            style={summonLinkStyle}
+          >
+            ✦ or summon a custom star
+          </button>
+        </>
+      )}
+
       <div style={countRowStyle}>
         <span style={countLabelStyle}>How many?</span>
         <span style={countChipsStyle}>
@@ -454,11 +552,13 @@ function ConfirmStep({
   honorees,
   reason,
   style,
+  customImageUrl,
   count,
 }: {
   honorees: User[];
   reason: string;
   style: string;
+  customImageUrl: string | null;
   count: number;
 }) {
   // Cheap visual cluster — purely cosmetic, doesn't drive the real layout.
@@ -480,7 +580,10 @@ function ConfirmStep({
     return out;
   }, [count]);
 
-  const url = presetUrl(style);
+  const url =
+    style === CUSTOM_STYLE && customImageUrl
+      ? customImageUrl
+      : presetUrl(style);
 
   return (
     <div style={confirmWrapStyle}>
@@ -521,7 +624,7 @@ function ConfirmStep({
       <div style={confirmRowStyle}>
         <span style={confirmKeyStyle}>
           {count} {count === 1 ? "star" : "stars"} ·{" "}
-          {style.replace(/-/g, " ")}
+          {style === CUSTOM_STYLE ? "summoned" : style.replace(/-/g, " ")}
         </span>
       </div>
     </div>
@@ -826,4 +929,74 @@ const confirmReasonStyle: CSSProperties = {
   color: "var(--sc-fg)",
   maxWidth: 360,
   textAlign: "center",
+};
+
+const summonLinkStyle: CSSProperties = {
+  alignSelf: "center",
+  background: "transparent",
+  border: "none",
+  color: "var(--sc-gold)",
+  fontFamily: "var(--sc-serif)",
+  fontStyle: "italic",
+  fontSize: "0.95rem",
+  letterSpacing: "0.02em",
+  cursor: "pointer",
+  padding: "0.2rem 0.4rem",
+  textDecoration: "underline",
+  textUnderlineOffset: 4,
+  textDecorationThickness: 1,
+  textDecorationColor: "rgba(245,196,107,0.45)",
+};
+
+const customPreviewWrapStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  gap: 8,
+  padding: "10px 0 4px",
+};
+
+const customPreviewImgStyle: CSSProperties = {
+  width: 120,
+  height: 120,
+  objectFit: "contain",
+  filter: "drop-shadow(0 0 24px rgba(255,235,180,0.55))",
+  pointerEvents: "none",
+  userSelect: "none",
+};
+
+const customPreviewLabelStyle: CSSProperties = {
+  margin: 0,
+  fontFamily: "var(--sc-sans)",
+  fontSize: "0.7rem",
+  letterSpacing: "0.18em",
+  textTransform: "uppercase",
+  color: "var(--sc-fg-muted)",
+};
+
+const customPreviewLinksStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  marginTop: 2,
+};
+
+const inlineLinkStyle: CSSProperties = {
+  background: "transparent",
+  border: "none",
+  color: "var(--sc-fg-faint)",
+  fontFamily: "var(--sc-sans)",
+  fontSize: "0.74rem",
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  cursor: "pointer",
+  padding: "0.25rem 0.4rem",
+  textDecoration: "underline",
+  textUnderlineOffset: 3,
+  textDecorationColor: "var(--sc-stroke)",
+};
+
+const inlineDotStyle: CSSProperties = {
+  color: "var(--sc-fg-faint)",
+  opacity: 0.6,
 };

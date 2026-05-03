@@ -1,0 +1,35 @@
+name = "starcharts-summon"
+main = "src/index.ts"
+compatibility_date = "2026-05-03"
+
+# Workers Logs (real-time tail + persisted logs in dashboard).
+[observability]
+enabled = true
+
+# Account ID is intentionally left commented. Either:
+#   1) run `wrangler login` (auto-resolves), or
+#   2) uncomment and paste your Cloudflare account ID, or
+#   3) export CLOUDFLARE_ACCOUNT_ID before deploy.
+# account_id = ""
+
+# R2 bucket for the generated PNGs. The bucket itself must already exist
+# (`wrangler r2 bucket create starcharts-customs`). See worker/README.md.
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "starcharts-customs"
+
+# Custom domain: summon.stars.realm.watch.
+# Cloudflare will create the DNS + cert automatically when this is enabled
+# (assuming the realm.watch zone is in this account, which it is).
+[[routes]]
+pattern = "summon.stars.realm.watch"
+custom_domain = true
+
+# Local-dev secrets live in .dev.vars (gitignored). For production,
+# set them via `wrangler secret put AZURE_OPENAI_API_KEY`, etc.
+# Required secrets:
+#   AZURE_OPENAI_ENDPOINT
+#   AZURE_OPENAI_API_KEY
+#   AZURE_OPENAI_DEPLOYMENT
+#   AZURE_OPENAI_API_VERSION
+#   PUBLIC_BUCKET_URL  (optional — public R2 URL prefix; falls back to /r2/<key>)

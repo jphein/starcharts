@@ -8,6 +8,13 @@
 import { db } from "../db/client";
 import type { Gift, User } from "../types";
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(s: string | undefined): s is string {
+  return typeof s === "string" && UUID_RE.test(s);
+}
+
 export type GiftWithLinks = Gift & {
   giver: User | null;
   honorees: User[];
@@ -35,8 +42,10 @@ function toUser(u: {
 export function useGiftsForChart(
   chartId: string | undefined,
 ): UseGiftsForChartResult {
+  const valid = isUuid(chartId);
+
   const result = db.useQuery(
-    chartId
+    valid
       ? {
           gifts: {
             $: { where: { "chart.id": chartId } },
@@ -47,7 +56,7 @@ export function useGiftsForChart(
       : null,
   );
 
-  if (!chartId) {
+  if (!valid) {
     return { gifts: [], isLoading: false };
   }
   if (result.isLoading) {

@@ -1,0 +1,24 @@
+# Local-dev secrets for `wrangler dev`. Copy to .dev.vars and fill in
+# real values. Never commit .dev.vars (it must stay in .gitignore).
+#
+#   cp .dev.vars.example .dev.vars
+#
+# In production, set these via `wrangler secret put <NAME>` instead.
+
+# Azure AI Foundry resource hosting the gpt-image-1.5 deployment.
+AZURE_OPENAI_ENDPOINT="https://claud-assistant-resource.cognitiveservices.azure.com"
+
+# Pulled from Bitwarden; rotate by re-running `wrangler secret put`.
+AZURE_OPENAI_API_KEY="REPLACE_ME"
+
+# Deployment name on the Azure resource.
+AZURE_OPENAI_DEPLOYMENT="gpt-image-1.5"
+
+# Foundry image API version.
+AZURE_OPENAI_API_VERSION="2025-04-01-preview"
+
+# Optional. If R2 public access is configured, set the public URL prefix
+# (no trailing slash) and the Worker returns
+# `${PUBLIC_BUCKET_URL}/<key>.png`. Otherwise the Worker returns a
+# self-served `/r2/<key>` URL on its own origin.
+# PUBLIC_BUCKET_URL="https://customs.starcharts.jphe.in"

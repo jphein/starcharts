@@ -10,6 +10,7 @@ import { AnimatePresence } from "framer-motion";
 import { Sky } from "../components/Sky";
 import { Star } from "../components/Star";
 import { GiftCard } from "../components/GiftCard";
+import { PresencePanel } from "../components/PresencePanel";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useCurrentGroup } from "../hooks/useCurrentGroup";
 import { useChart } from "../hooks/useChart";
@@ -137,9 +138,12 @@ export default function ConstellationMemory() {
           <h1 style={titleStyle}>{chart.name}</h1>
         </div>
 
-        <div style={memoryStampStyle} aria-label="Memory date">
-          <span aria-hidden="true" style={{ marginRight: 4 }}>✦</span>
-          Memory · {memoryLabel}
+        <div style={trailingStyle}>
+          <PresencePanel chartId={chart.id} />
+          <div style={memoryStampStyle} aria-label="Memory date">
+            <span aria-hidden="true" style={{ marginRight: 4 }}>✦</span>
+            Memory · {memoryLabel}
+          </div>
         </div>
       </header>
 
@@ -211,6 +215,13 @@ const titleStyle: CSSProperties = {
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
+};
+
+const trailingStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 12,
+  flexShrink: 0,
 };
 
 const memoryStampStyle: CSSProperties = {

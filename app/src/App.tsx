@@ -3,6 +3,7 @@ import { ThemeProvider } from "./design/theme";
 import { Placeholder } from "./components/Placeholder";
 
 import SignIn from "./screens/SignIn";
+import ProfileSetup from "./screens/ProfileSetup";
 import GroupSetup from "./screens/GroupSetup";
 import Dashboard from "./screens/Dashboard";
 import CreateChart from "./screens/CreateChart";
@@ -20,6 +21,7 @@ export function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/sign-in" replace />} />
           <Route path="/sign-in" element={<SignIn />} />
+          <Route path="/profile-setup" element={<ProfileSetup />} />
           <Route path="/group-setup" element={<GroupSetup />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/charts/new" element={<CreateChart />} />
