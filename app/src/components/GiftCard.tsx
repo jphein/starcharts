@@ -72,6 +72,14 @@ export function GiftCard({ gift, onClose }: GiftCardProps) {
               : { type: "spring", damping: 32, stiffness: 320 }
           }
         >
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={closeBtnStyle}
+          >
+            ✕
+          </button>
+
           <div style={handleBarStyle} aria-hidden />
 
           <div style={heroWrapStyle}>
@@ -117,6 +125,8 @@ const sheetStyle: React.CSSProperties = {
   position: "relative",
   width: "100%",
   maxWidth: 480,
+  maxHeight: "90dvh",
+  overflowY: "auto",
   margin: "0 auto",
   background: "var(--sc-surface)",
   border: "1px solid var(--sc-stroke)",
@@ -128,6 +138,25 @@ const sheetStyle: React.CSSProperties = {
   WebkitBackdropFilter: "blur(10px)",
   color: "var(--sc-fg)",
   textAlign: "center",
+};
+
+const closeBtnStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 14,
+  right: 16,
+  width: 28,
+  height: 28,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "transparent",
+  border: "none",
+  cursor: "pointer",
+  color: "var(--sc-fg-muted)",
+  fontSize: 14,
+  lineHeight: 1,
+  borderRadius: "50%",
+  padding: 0,
 };
 
 const handleBarStyle: React.CSSProperties = {
