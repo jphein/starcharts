@@ -11,7 +11,7 @@
 // route to /charts/:id/celebrate. If the flag is already set, the chart
 // is in memory mode and we bounce to /charts/:id/memory instead.
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { Sky } from "../components/Sky";
@@ -70,7 +70,11 @@ export default function ChartSky() {
     };
   }
 
-  useEffect(() => { applyTransform(); }, []);
+  // No dependency array: fires after every render so the transform is applied
+  // as soon as the canvas element actually mounts (the loading gate keeps it
+  // out of the DOM until user+group+chart are ready, so a one-shot [] effect
+  // fires while canvasRef is still null and the initial offset is never set).
+  useLayoutEffect(() => { applyTransform(); });
 
   useEffect(() => {
     function onResize() {
