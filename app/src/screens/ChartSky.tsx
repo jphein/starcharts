@@ -11,7 +11,7 @@
 // route to /charts/:id/celebrate. If the flag is already set, the chart
 // is in memory mode and we bounce to /charts/:id/memory instead.
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { Sky } from "../components/Sky";
@@ -42,6 +42,82 @@ export default function ChartSky() {
   const { gifts, isLoading: giftsLoading } = useGiftsForChart(chartId);
 
   const [selectedGift, setSelectedGift] = useState<GiftWithLinks | null>(null);
+
+  // ── Panning ──────────────────────────────────────────────────────────────
+  const canvasRef = useRef<HTMLDivElement>(null);
+  // Start centered on the 2× canvas so the full star field is reachable.
+  const panRef = useRef({
+    x: -(window.innerWidth / 2),
+    y: -(window.innerHeight / 2),
+  });
+  const dragState = useRef<{
+    px: number; py: number; panX: number; panY: number;
+  } | null>(null);
+  const dragMoved = useRef(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  function applyTransform() {
+    if (!canvasRef.current) return;
+    canvasRef.current.style.transform =
+      `translate(${panRef.current.x}px, ${panRef.current.y}px)`;
+  }
+
+  function clampedPan(x: number, y: number) {
+    return {
+      x: Math.min(0, Math.max(-window.innerWidth, x)),
+      y: Math.min(0, Math.max(-window.innerHeight, y)),
+    };
+  }
+
+  useEffect(() => { applyTransform(); }, []);
+
+  useEffect(() => {
+    function onResize() {
+      panRef.current = clampedPan(panRef.current.x, panRef.current.y);
+      applyTransform();
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  function handlePointerDown(e: React.PointerEvent) {
+    if (e.button !== 0) return;
+    dragState.current = {
+      px: e.clientX, py: e.clientY,
+      panX: panRef.current.x, panY: panRef.current.y,
+    };
+    dragMoved.current = false;
+    setIsDragging(true);
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function handlePointerMove(e: React.PointerEvent) {
+    if (!dragState.current) return;
+    const dx = e.clientX - dragState.current.px;
+    const dy = e.clientY - dragState.current.py;
+    if (!dragMoved.current && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+      dragMoved.current = true;
+    }
+    panRef.current = clampedPan(
+      dragState.current.panX + dx,
+      dragState.current.panY + dy,
+    );
+    applyTransform();
+  }
+
+  function handlePointerUp() {
+    dragState.current = null;
+    setIsDragging(false);
+  }
+
+  // Suppress star clicks that are actually the end of a drag gesture.
+  function handleClickCapture(e: React.MouseEvent) {
+    if (dragMoved.current) {
+      e.stopPropagation();
+      dragMoved.current = false;
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Auth gate.
   useEffect(() => {
@@ -98,30 +174,62 @@ export default function ChartSky() {
 
   return (
     <div style={containerStyle}>
-      <Sky>
-        {!giftsLoading &&
-          gifts.flatMap((gift) => {
-            const positions = expandClusterPositions(gift);
-            const altBase = gift.reason.length > 60
-              ? `${gift.reason.slice(0, 57)}…`
-              : gift.reason;
-            return positions.map((pos, idx) => (
-              <Star
-                key={`${gift.id}-${idx}`}
-                style={gift.style}
-                customImageUrl={
-                  gift.style === "custom" ? gift.starImageUrl : undefined
-                }
-                x={pos.x}
-                y={pos.y}
-                count={normalizeCount(gift.count)}
-                onClick={() => setSelectedGift(gift)}
-                alt={altBase}
-                delay={(idx % 5) * 0.4}
-              />
-            ));
-          })}
-      </Sky>
+      {/* Pan surface — fills the viewport and captures drag gestures */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          cursor: isDragging ? "grabbing" : "grab",
+          touchAction: "none",
+        }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onClickCapture={handleClickCapture}
+      >
+        {/* Canvas — 2× the viewport, shifted so its centre fills the screen */}
+        <div
+          ref={canvasRef}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "200vw",
+            height: "200vh",
+            willChange: "transform",
+          }}
+        >
+          <Sky style={{ height: "200vh" }} />
+
+          {/* Stars are siblings of Sky so their % coords span the full canvas */}
+          <div style={{ position: "absolute", inset: 0 }}>
+            {!giftsLoading &&
+              gifts.flatMap((gift) => {
+                const positions = expandClusterPositions(gift);
+                const altBase =
+                  gift.reason.length > 60
+                    ? `${gift.reason.slice(0, 57)}…`
+                    : gift.reason;
+                return positions.map((pos, idx) => (
+                  <Star
+                    key={`${gift.id}-${idx}`}
+                    style={gift.style}
+                    customImageUrl={
+                      gift.style === "custom" ? gift.starImageUrl : undefined
+                    }
+                    x={pos.x}
+                    y={pos.y}
+                    count={normalizeCount(gift.count)}
+                    onClick={() => setSelectedGift(gift)}
+                    alt={altBase}
+                    delay={(idx % 5) * 0.4}
+                  />
+                ));
+              })}
+          </div>
+        </div>
+      </div>
 
       <header style={topBarStyle}>
         <button

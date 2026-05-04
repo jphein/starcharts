@@ -6,6 +6,7 @@ interface SkyProps {
   children?: ReactNode;
   dustCount?: number;
   seed?: number;
+  style?: React.CSSProperties;
 }
 
 function mulberry32(seed: number) {
@@ -31,7 +32,7 @@ const NEBULAE = [
   { className: styles.nebula3, delay: 4 },
 ];
 
-export function Sky({ children, dustCount = 40, seed = 1337 }: SkyProps) {
+export function Sky({ children, dustCount = 40, seed = 1337, style }: SkyProps) {
   const prefersReducedMotion = useReducedMotion();
 
   const dust = useMemo<DustMote[]>(() => {
@@ -54,7 +55,7 @@ export function Sky({ children, dustCount = 40, seed = 1337 }: SkyProps) {
     : { scale: [1, 1.08, 1] };
 
   return (
-    <div className={styles.wrap} aria-hidden={false}>
+    <div className={styles.wrap} style={style} aria-hidden={false}>
       {NEBULAE.map((n, i) => (
         <motion.div
           key={i}
