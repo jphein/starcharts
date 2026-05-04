@@ -54,6 +54,7 @@ export default function ChartSky() {
     px: number; py: number; panX: number; panY: number;
   } | null>(null);
   const dragMoved = useRef(false);
+  const activePointerId = useRef<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   function applyTransform() {
@@ -80,34 +81,48 @@ export default function ChartSky() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // Global move/up listeners keep drag smooth when the pointer moves fast
+  // off the pan surface, without using setPointerCapture (which redirects
+  // click events away from stars and breaks tap-to-open).
+  useEffect(() => {
+    function onMove(e: PointerEvent) {
+      if (e.pointerId !== activePointerId.current || !dragState.current) return;
+      const dx = e.clientX - dragState.current.px;
+      const dy = e.clientY - dragState.current.py;
+      if (!dragMoved.current && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+        dragMoved.current = true;
+      }
+      panRef.current = clampedPan(
+        dragState.current.panX + dx,
+        dragState.current.panY + dy,
+      );
+      applyTransform();
+    }
+    function onUp(e: PointerEvent) {
+      if (e.pointerId !== activePointerId.current) return;
+      activePointerId.current = null;
+      dragState.current = null;
+      setIsDragging(false);
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, []);
+
   function handlePointerDown(e: React.PointerEvent) {
     if (e.button !== 0) return;
+    activePointerId.current = e.pointerId;
     dragState.current = {
       px: e.clientX, py: e.clientY,
       panX: panRef.current.x, panY: panRef.current.y,
     };
     dragMoved.current = false;
     setIsDragging(true);
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  }
-
-  function handlePointerMove(e: React.PointerEvent) {
-    if (!dragState.current) return;
-    const dx = e.clientX - dragState.current.px;
-    const dy = e.clientY - dragState.current.py;
-    if (!dragMoved.current && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
-      dragMoved.current = true;
-    }
-    panRef.current = clampedPan(
-      dragState.current.panX + dx,
-      dragState.current.panY + dy,
-    );
-    applyTransform();
-  }
-
-  function handlePointerUp() {
-    dragState.current = null;
-    setIsDragging(false);
   }
 
   // Suppress star clicks that are actually the end of a drag gesture.
@@ -183,9 +198,6 @@ export default function ChartSky() {
           touchAction: "none",
         }}
         onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
         onClickCapture={handleClickCapture}
       >
         {/* Canvas — 2× the viewport, shifted so its centre fills the screen */}
