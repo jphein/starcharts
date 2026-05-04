@@ -35,6 +35,14 @@ type Step = "honorees" | "reason" | "preset" | "confirm";
 
 const CUSTOM_STYLE = "custom";
 
+// sessionStorage key for the in-flight gift draft (honorees,
+// reason, count). Stashed when the user navigates to /summon so
+// that we can restore their work when they come back — the
+// summon route unmounts GiftFlow and React state is lost otherwise.
+function giftDraftKey(chartId: string): string {
+  return `sc_gift_draft_${chartId}`;
+}
+
 type SubmitState =
   | { status: "idle" | "submitting" }
   | { status: "error"; message: string };
@@ -81,20 +89,59 @@ export default function GiftFlow() {
     status: "idle",
   });
 
-  // Hydrate a summoned custom star if SummonFlow stashed one for this chart.
-  // Pre-selects style="custom" and jumps to the preset step; consume the entry
-  // so a refresh won't re-apply it.
+  // Hydrate the in-flight gift draft + any summoned custom star if
+  // we came back from /summon. Without this, the user's honoree
+  // pick + reason text would be lost during the summon detour
+  // because React Router unmounts GiftFlow when navigating away.
+  // Both stashes are consumed so a hard refresh later doesn't
+  // re-apply them.
   useEffect(() => {
     if (!chartId) return;
-    let raw: string | null = null;
+
+    // 1. Restore the gift draft (honorees, reason, count) we
+    //    stashed when the user pressed Summon.
+    let draftRaw: string | null = null;
     try {
-      raw = window.sessionStorage.getItem(summonStashKey(chartId));
+      draftRaw = window.sessionStorage.getItem(giftDraftKey(chartId));
+    } catch {
+      // sessionStorage may be unavailable; fall through without
+      // restoring — user can re-enter their picks.
+    }
+    if (draftRaw) {
+      try {
+        const draft = JSON.parse(draftRaw) as {
+          honoreeIds?: string[];
+          reason?: string;
+          count?: number;
+        };
+        if (Array.isArray(draft.honoreeIds)) {
+          setHonoreeIds(draft.honoreeIds.filter((s) => typeof s === "string"));
+        }
+        if (typeof draft.reason === "string") setReason(draft.reason);
+        if (typeof draft.count === "number" && draft.count >= 1) {
+          setCount(draft.count);
+        }
+      } catch {
+        // Malformed — ignore.
+      }
+      try {
+        window.sessionStorage.removeItem(giftDraftKey(chartId));
+      } catch {
+        // best-effort.
+      }
+    }
+
+    // 2. Restore the summon result and jump to the preset step
+    //    where the user left off.
+    let summonRaw: string | null = null;
+    try {
+      summonRaw = window.sessionStorage.getItem(summonStashKey(chartId));
     } catch {
       return;
     }
-    if (!raw) return;
+    if (!summonRaw) return;
     try {
-      const parsed = JSON.parse(raw) as { url?: string };
+      const parsed = JSON.parse(summonRaw) as { url?: string };
       if (parsed?.url) {
         setStyle(CUSTOM_STYLE);
         setCustomImageUrl(parsed.url);
@@ -307,9 +354,23 @@ export default function GiftFlow() {
                 setStyle(null);
                 setCustomImageUrl(null);
               }}
-              onSummon={() =>
-                chartId && navigate(`/charts/${chartId}/summon`)
-              }
+              onSummon={() => {
+                if (!chartId) return;
+                // Persist the in-flight draft so coming back from
+                // the summon route keeps the user's picks intact
+                // — see the hydration effect at the top of this
+                // component.
+                try {
+                  window.sessionStorage.setItem(
+                    giftDraftKey(chartId),
+                    JSON.stringify({ honoreeIds, reason, count }),
+                  );
+                } catch {
+                  // sessionStorage unavailable — proceed anyway;
+                  // the user just loses their state on return.
+                }
+                navigate(`/charts/${chartId}/summon`);
+              }}
               count={count}
               onCountChange={setCount}
             />

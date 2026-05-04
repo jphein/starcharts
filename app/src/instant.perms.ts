@@ -23,8 +23,11 @@
 //                charts and gifts in any group. New rules:
 //                  - groups: any authed user can create a group;
 //                    any member can rename their own group; nobody
-//                    can delete via the client. View is open to
-//                    any authed user (see "Known gap" below).
+//                    can delete via the client. View was kept open
+//                    to authed users so the join-by-invite-code
+//                    flow could resolve a code → groupId; closed
+//                    to members-only later (see 2026-05-03 entry
+//                    below).
 //                  - charts: only members of the chart's group can
 //                    view, create, or update; charts can't be
 //                    deleted from the client (per v1 design —
@@ -33,16 +36,29 @@
 //                    view or create; gifts are immutable
 //                    (update = delete = false).
 //
-// Known gap: groups.view is intentionally permissive to keep the
-// join-by-invite-code flow working. `GroupSetup.handleJoin` does a
-// `queryOnce({ groups: { where: { inviteCode } } })` lookup; if the
-// view rule were members-only, that query would return empty for a
-// non-member and joining would be impossible. The cost: an authed
-// visitor can iterate groups and harvest invite codes. The fix is
-// a Worker-side `POST /api/join-group` endpoint that does the
-// inviteCode lookup with an admin token and returns only the
-// groupId, allowing groups.view to be locked to members. Tracked
-// as the next perms task.
+//   2026-05-03 — closed groups.view to members-only. Now that the
+//                Cloudflare Worker exposes `POST /api/join-group`
+//                (admin-token-backed inviteCode → groupId lookup),
+//                the SPA's `GroupSetup.handleJoin` no longer needs
+//                direct read access to `groups`. Closing this rule
+//                is what makes group enumeration impractical from
+//                the public app.
+//
+//   2026-05-03 — tightened groups.update + charts.update via
+//                `request.modifiedFields.all(field, field == '<X>')`.
+//                Earlier attempts at field-immutability used
+//                `newData.X == data.X` but failed against partial
+//                updates (the goal-reached `update({completedAt})`
+//                only puts `completedAt` in newData; unchanged
+//                fields read as null and the equality check
+//                rejected them). The `modifiedFields` quantifier
+//                expresses immutability without hitting that
+//                edge: a `tx.update({name: …})` puts only `name`
+//                in the set; the rule passes only when every
+//                element is the allowed field. Now `groups.update`
+//                rejects any change other than `name`, and
+//                `charts.update` rejects any change other than
+//                `completedAt`.
 
 import type { InstantRules } from "@instantdb/react";
 
@@ -74,19 +90,38 @@ const rules = {
 
   groups: {
     allow: {
-      // See "Known gap" in the file header. Permissive view keeps
-      // the invite-code lookup in `GroupSetup.handleJoin` working;
-      // gives up enumeration resistance. Replace with members-only
-      // once a Worker-side join endpoint exists.
-      view: "auth.id != null",
+      // Members-only. Non-members never need to read `groups`
+      // directly — the SPA's join-by-code path goes through the
+      // Cloudflare Worker's `/api/join-group` endpoint, which
+      // does the inviteCode lookup with the InstantDB admin
+      // token and returns just the group id + name. Closing
+      // direct read here is what makes group enumeration
+      // impractical from the public app.
+      view: "auth.id != null && auth.id in data.ref('members.id')",
 
-      // Anyone authed can create a group. The same transact links
-      // the creator as the first member.
+      // Any authed user can create a group. We *intend* the same
+      // transact to link the creator as the first member — but we
+      // can't enforce that at create time via the rule, since
+      // `newData.ref()` doesn't resolve link targets being set in
+      // the same transact (same constraint as charts/gifts.create).
+      // Realistic mitigation is the same as elsewhere: any group
+      // created without a member link is invisible to everyone via
+      // the read paths that depend on membership. A Worker-side
+      // write proxy with admin auth would close this for real.
       create: "auth.id != null",
 
-      // Members can rename / edit their group (used by the
-      // inline-edit affordance on Dashboard).
-      update: "auth.id != null && auth.id in data.ref('members.id')",
+      // Members can rename their group, but `inviteCode` and
+      // `createdAt` are immutable after creation — without this,
+      // any member could rotate the invite code (breaking the
+      // join flow for everyone else) or rewrite the group's
+      // birthday. Uses InstantDB's `request.modifiedFields` set
+      // so partial updates work cleanly: a `tx.update({name:…})`
+      // sets `modifiedFields = ['name']`, and the rule passes only
+      // if every entry in that set is `name`.
+      update:
+        "auth.id != null && " +
+        "auth.id in data.ref('members.id') && " +
+        "request.modifiedFields.all(field, field == 'name')",
 
       // No client-side group deletion in v1.
       delete: "false",
@@ -112,9 +147,29 @@ const rules = {
       // immediately after creation.
       create: "auth.id != null",
 
-      // Members can update — used by `chart.completedAt` write
-      // when a gift hits the goal.
-      update: "auth.id != null && auth.id in data.ref('group.members.id')",
+      // Members can update — but only the `completedAt` field is
+      // mutable, and only as a one-way transition from null to a
+      // timestamp. The rest of a chart (name, goalCount, reward,
+      // createdAt) is set at creation and stays put.
+      //
+      // Three constraints:
+      //   1. `request.modifiedFields.all(field, field == 'completedAt')`
+      //      — only `completedAt` may appear in this update.
+      //   2. `data.completedAt == null` — the chart must currently
+      //      be incomplete. Once stamped, it can't be re-stamped or
+      //      cleared. This prevents toggle-loops that would retrigger
+      //      the celebrate scene + memory transition.
+      //   3. `newData.completedAt != null` — the new value must be
+      //      a real timestamp (no "uncomplete" via writing null).
+      //
+      // Per the design brief, completed charts become memories,
+      // not editable artifacts.
+      update:
+        "auth.id != null && " +
+        "auth.id in data.ref('group.members.id') && " +
+        "request.modifiedFields.all(field, field == 'completedAt') && " +
+        "data.completedAt == null && " +
+        "newData.completedAt != null",
 
       // Charts are not deletable in v1 — completed charts become
       // memories per the design brief.

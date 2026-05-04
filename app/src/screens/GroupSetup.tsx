@@ -17,6 +17,7 @@ import {
   isValidInviteCode,
   normalizeInviteCode,
 } from "../lib/inviteCode";
+import { joinGroupByCode, JoinError } from "../lib/join";
 
 type CreateState = { status: "idle" | "submitting" } | { status: "error"; message: string };
 type JoinState = { status: "idle" | "submitting" } | { status: "error"; message: string };
@@ -91,19 +92,22 @@ export default function GroupSetup() {
 
     setJoinState({ status: "submitting" });
     try {
-      const result = await db.queryOnce({
-        groups: { $: { where: { inviteCode: normalized } } },
-      });
-      const match = result.data.groups?.[0];
-      if (!match) {
-        setJoinState({ status: "error", message: "No group found with that code." });
-        return;
-      }
-      await db.transact(db.tx.groups[match.id].link({ members: user.id }));
-      setCurrentGroupId(match.id);
+      // Resolve the invite code via the Worker. Lets the SPA's
+      // `groups.view` permission stay members-only — non-members
+      // don't need direct read access to `groups` to join.
+      const { groupId } = await joinGroupByCode(normalized);
+      // Now perform the link from the user's own auth context. The
+      // group's permission rules govern this, not the worker.
+      await db.transact(db.tx.groups[groupId].link({ members: user.id }));
+      setCurrentGroupId(groupId);
       navigate("/dashboard");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Couldn't join that group.";
+      const message =
+        err instanceof JoinError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Couldn't join that group.";
       setJoinState({ status: "error", message });
     }
   }

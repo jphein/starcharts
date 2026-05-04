@@ -1,24 +1,33 @@
-// Starcharts summon Worker.
+// Starcharts Worker.
 //
-// POST /api/summon  { prompt: string, groupId: string }  → { url: string }
+// POST /api/summon       { prompt, groupId }   → { url }
+// POST /api/join-group   { inviteCode }        → { groupId, name }
+// GET  /r2/<key>                               → image bytes
 //
-// Proxies a user prompt through to Azure AI Foundry's gpt-image-1.5
-// deployment, decodes the returned base64 PNG, stores it in R2, and
-// returns a URL the browser can drop into an <img>.
+// Endpoints:
+//   - /api/summon: proxies a user prompt to Azure AI Foundry
+//     gpt-image-1.5, stores the resulting PNG in R2, returns a URL.
+//     Rate-limited per-group/day and per-IP/hour via KV.
+//   - /api/join-group: looks up an invite code in InstantDB using
+//     the admin token, returns just the group id + name. Lets the
+//     SPA join a group without needing `groups.view` to be
+//     globally readable. Rate-limited per-IP/hour with a separate
+//     bucket so brute-force inviteCode guessing is impractical.
+//   - /r2: fallback delivery for R2 PNGs when PUBLIC_BUCKET_URL
+//     isn't set.
 //
-// GET /r2/<key>  → bytes  (fallback when PUBLIC_BUCKET_URL isn't set)
-//
-// Rate-limits (per-group day, per-IP hour) live in KV. Content
-// moderation is intentionally not done here — Azure's content filter
-// is the single source of truth for what's allowed through the model.
+// Content moderation is intentionally not done here — Azure's
+// content filter is the single source of truth for what's allowed
+// through the model.
 //
 // Secrets / bindings:
 //   - BUCKET                   R2 bucket binding (wrangler.toml)
 //   - RATE_LIMIT_KV            KV namespace for counters
-//   - AZURE_OPENAI_ENDPOINT    e.g. https://...cognitiveservices.azure.com
+//   - AZURE_OPENAI_ENDPOINT
 //   - AZURE_OPENAI_API_KEY
 //   - AZURE_OPENAI_DEPLOYMENT  e.g. gpt-image-1.5
 //   - AZURE_OPENAI_API_VERSION e.g. 2025-04-01-preview
+//   - INSTANT_ADMIN_TOKEN      InstantDB admin token (for /api/join-group)
 //   - PUBLIC_BUCKET_URL        optional public R2 prefix
 
 export interface Env {
@@ -30,8 +39,43 @@ export interface Env {
   AZURE_OPENAI_API_KEY: string;
   AZURE_OPENAI_DEPLOYMENT: string;
   AZURE_OPENAI_API_VERSION: string;
+  // Optional — /api/join-group returns 503 without it.
+  INSTANT_ADMIN_TOKEN?: string;
   PUBLIC_BUCKET_URL?: string;
 }
+
+// Public InstantDB app id — same value baked into the SPA at
+// app/src/db/client.ts. Kept as a constant since it's not a secret;
+// rotating the app id is a multi-step migration anyway.
+const INSTANT_APP_ID = "e526d9cf-e783-4a99-b3b3-a69730ecdd7e";
+
+// InstantDB invite codes are 6 chars from A–Z and 2–9 (skipping
+// confusable I/O/0/1). Mirror of `app/src/lib/inviteCode.ts`.
+const INVITE_CODE_RE = /^[A-Z2-9]{6}$/;
+
+// Per-IP cap on join-group lookups, sized for "small enough that
+// even concurrent-burst racing doesn't dent the keyspace."
+//
+// Cloudflare KV is non-atomic and eventually-consistent. Two
+// concrete races bite this counter:
+//   1. Stale reads — concurrent requests can all observe the same
+//      pre-bump `current` and pass the cap check together.
+//   2. Lost updates — concurrent `put(current+1)` writes from the
+//      same `current` collapse to one increment, so the counter
+//      undercounts the actual request volume.
+// Net effect: a bursting attacker can punch through the cap by
+// some multiple before the next bucket. We accept this for v1
+// because (a) the cap is small enough that even a 100× burst is
+// only 1,000 lookups/hour, and (b) Cloudflare's edge DDoS clamps
+// concurrent connections per IP at roughly that range anyway.
+//
+// Brute-force math: 32^6 ≈ 1.07B invite-code keyspace. At a
+// realistic ceiling of 100/hour per IP (10× the configured cap),
+// full enumeration takes ~1,200 years per IP. Adequate.
+//
+// A genuinely atomic counter would need a Durable Object —
+// tracked as a follow-up.
+const IP_JOIN_HOURLY_CAP = 10;
 
 const ALLOWED_ORIGINS = new Set([
   "https://stars.realm.watch",
@@ -66,6 +110,10 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/api/summon") {
       return withCors(await handleSummon(request, env), origin);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/join-group") {
+      return withCors(await handleJoinGroup(request, env), origin);
     }
 
     if (request.method === "GET" && url.pathname.startsWith("/r2/")) {
@@ -386,6 +434,160 @@ function secondsUntilNextUtcHour(now: Date): number {
     ),
   );
   return Math.max(30, Math.ceil((next.getTime() - now.getTime()) / 1000));
+}
+
+// POST /api/join-group { inviteCode } → { groupId, name }
+//
+// Looks up an invite code in InstantDB using the admin token, so
+// the SPA can resolve a code to a group id without needing
+// `groups.view` to be open to all authed users. With this endpoint
+// in place, `groups.view` can be locked to members and the only
+// way to discover a group's id from outside is via the admin path
+// here, which is rate-limited per IP to make brute-force guessing
+// of the 6-char invite code (32⁶ ≈ 1B) impractical.
+//
+// The endpoint is intentionally narrow: it returns *only* the
+// group id and name. The inviteCode itself is not echoed back. The
+// SPA uses the returned id to perform `groups[id].link({members:
+// authUserId})` from the user's own auth context — which still
+// passes the InstantDB perm rule for membership joining.
+async function handleJoinGroup(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  if (!env.INSTANT_ADMIN_TOKEN) {
+    console.warn(
+      "INSTANT_ADMIN_TOKEN not configured — /api/join-group disabled. " +
+        "Set the secret with `wrangler secret put INSTANT_ADMIN_TOKEN`.",
+    );
+    return json({ error: "join-group endpoint not configured" }, 503);
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "invalid JSON body" }, 400);
+  }
+
+  const raw =
+    body && typeof body === "object" && "inviteCode" in body
+      ? (body as { inviteCode: unknown }).inviteCode
+      : undefined;
+  if (typeof raw !== "string") {
+    return json({ error: "inviteCode is required" }, 400);
+  }
+  const inviteCode = raw.trim().toUpperCase();
+  if (!INVITE_CODE_RE.test(inviteCode)) {
+    return json({ error: "inviteCode must be 6 characters from A–Z, 2–9" }, 400);
+  }
+
+  // Per-IP rate limit on lookup attempts. Skipped silently if KV
+  // isn't provisioned (matches the rest of the Worker's defensive
+  // style).
+  //
+  // We check first, write second — and *don't* write when over cap.
+  // Writing on every request (including blocked ones) would let an
+  // attacker amplify our KV write volume after they've already hit
+  // the cap, which costs more than it buys. The cost is the
+  // stale-read race documented at IP_JOIN_HOURLY_CAP: a concurrent
+  // burst can slip through together. The brute-force math up there
+  // already accounts for that worst case.
+  const ip = resolveClientIp(request);
+  if (env.RATE_LIMIT_KV && ip) {
+    const now = new Date();
+    const hour = `${now.getUTCFullYear()}${pad2(now.getUTCMonth() + 1)}${pad2(
+      now.getUTCDate(),
+    )}${pad2(now.getUTCHours())}`;
+    const key = `ipjoin:${ip}:${hour}`;
+    const current = await readCount(env.RATE_LIMIT_KV, key);
+    if (current >= IP_JOIN_HOURLY_CAP) {
+      const headers = new Headers({
+        "Content-Type": "application/json; charset=utf-8",
+      });
+      headers.set("Retry-After", String(secondsUntilNextUtcHour(now)));
+      return new Response(
+        JSON.stringify({
+          error: "too many join attempts from this device — try again shortly.",
+          retryAfterSeconds: secondsUntilNextUtcHour(now),
+        }),
+        { status: 429, headers },
+      );
+    }
+    // Bump only when the request is going through. Failed lookups
+    // (404s after this point) still count against the cap because
+    // they got past this gate — a probe loop pays for every attempt
+    // that doesn't hit the cap.
+    await env.RATE_LIMIT_KV.put(key, String(current + 1), {
+      expirationTtl: SECONDS_IN_HOUR + 300,
+    });
+  }
+
+  // Admin query against InstantDB. The endpoint accepts InstaQL
+  // and bypasses perm rules using the admin token — so we get a
+  // result even when the caller has no auth context yet. We pull
+  // just `name` (along with the implicit `id`) to keep the
+  // response minimal.
+  let upstream: Response;
+  try {
+    upstream = await fetch(
+      `https://api.instantdb.com/admin/query?app_id=${INSTANT_APP_ID}`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "app-id": INSTANT_APP_ID,
+          authorization: `Bearer ${env.INSTANT_ADMIN_TOKEN}`,
+        },
+        body: JSON.stringify({
+          query: {
+            groups: {
+              $: { where: { inviteCode }, fields: ["name"] },
+            },
+          },
+        }),
+      },
+    );
+  } catch (err) {
+    // Log internally; the public response stays generic so we
+    // don't leak admin-API error shape to anonymous callers
+    // probing the endpoint.
+    console.error("join-group: admin fetch threw", err);
+    return json({ error: "couldn't reach the directory" }, 502);
+  }
+
+  if (!upstream.ok) {
+    const detail = await safeText(upstream);
+    console.error(
+      `join-group: admin returned ${upstream.status}`,
+      detail.slice(0, 500),
+    );
+    return json({ error: "directory lookup failed" }, 502);
+  }
+
+  let payload: unknown;
+  try {
+    payload = await upstream.json();
+  } catch (err) {
+    console.error("join-group: admin returned non-JSON", err);
+    return json({ error: "directory returned non-JSON" }, 502);
+  }
+
+  // Expected shape: { groups: [{ id, name }] } or { groups: [] }.
+  const groups =
+    payload && typeof payload === "object" && "groups" in payload
+      ? (payload as { groups: unknown }).groups
+      : null;
+  if (!Array.isArray(groups) || groups.length === 0) {
+    return json({ error: "no group with that invite code" }, 404);
+  }
+
+  const first = groups[0] as { id?: unknown; name?: unknown };
+  if (typeof first.id !== "string") {
+    return json({ error: "directory returned a malformed row" }, 502);
+  }
+  const name = typeof first.name === "string" ? first.name : "";
+  return json({ groupId: first.id, name }, 200);
 }
 
 async function handleR2(key: string, env: Env): Promise<Response> {
