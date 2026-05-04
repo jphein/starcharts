@@ -45,6 +45,10 @@ export function ChartCard({ chart }: ChartCardProps) {
   const seed = hashSeed(chart.id);
 
   const { gifts } = useGiftsForChart(chart.id);
+  const totalStarCount = useMemo(
+    () => gifts.reduce((sum, g) => sum + g.count, 0),
+    [gifts],
+  );
   const previewStars = useMemo(() => {
     const positions: { x: number; y: number; style: string; customImageUrl?: string }[] = [];
     for (const gift of gifts) {
@@ -142,7 +146,7 @@ export function ChartCard({ chart }: ChartCardProps) {
         {isComplete ? (
           <em style={{ fontStyle: "italic", opacity: 0.9 }}>complete</em>
         ) : (
-          `0 of ${chart.goalCount}`
+          `${totalStarCount} of ${chart.goalCount}`
         )}
       </div>
     </div>
