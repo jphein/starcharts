@@ -73,16 +73,45 @@ export default function ChartSky() {
   // `committed` flips true once movement crosses DRAG_THRESHOLD_PX, at which
   // point we stop suppressing onClick and start visually translating the
   // cluster wrapper.
+  // `baseOffsetX/Y` captures any inline transform already on the wrapper
+  // at drag-start (e.g. from a previous drag whose pending write hasn't
+  // confirmed yet), so a second drag doesn't cause a visual jump.
   const clusterDragRef = useRef<{
     giftId: string; px: number; py: number; committed: boolean;
+    baseOffsetX: number; baseOffsetY: number;
   } | null>(null);
   // DOM refs for each cluster wrapper, keyed by gift id. We mutate
   // `style.transform` directly during drag for per-frame smoothness instead
   // of routing every pointermove through React state.
   const clusterRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  // Per-gift "we wrote this position, waiting for realtime to confirm" map.
+  // While a write is in-flight, we keep the inline drag transform applied
+  // so the cluster doesn't snap back to its old anchor in the gap before
+  // the row update arrives. The effect below clears the transform once
+  // the gift's x/y in `gifts` matches what we wrote.
+  const pendingWrites = useRef<
+    Map<string, { expectedX: number; expectedY: number }>
+  >(new Map());
+  // Per-gift timeout IDs for failure-revert animations. Tracked so we can
+  // cancel an in-progress animation and clear its transition before a new
+  // drag starts on the same cluster.
+  const failTimeouts = useRef<Map<string, ReturnType<typeof window.setTimeout>>>(new Map());
   const dragMoved = useRef(false);
   const activePointerId = useRef<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Cancel any in-progress failure-revert animation for a cluster, clearing
+  // both the scheduled timeout and the CSS transition so that subsequent
+  // per-frame transform updates are not accidentally animated.
+  function cancelFailTimeout(id: string) {
+    const tid = failTimeouts.current.get(id);
+    if (tid !== undefined) {
+      window.clearTimeout(tid);
+      failTimeouts.current.delete(id);
+      const el = clusterRefs.current.get(id);
+      if (el) el.style.transition = "";
+    }
+  }
 
   function applyTransform() {
     if (!canvasRef.current) return;
@@ -109,6 +138,27 @@ export default function ChartSky() {
   const giftsRef = useRef<GiftWithLinks[]>(gifts);
   useEffect(() => {
     giftsRef.current = gifts;
+  }, [gifts]);
+
+  // When a realtime row update arrives, drop the inline drag transform
+  // for any cluster whose pending position has now caught up. This is
+  // what eliminates the snap-back-then-update flash on the success path:
+  // we keep the drag transform applied through the round-trip and only
+  // clear it when the row's stored x/y matches what we wrote.
+  useEffect(() => {
+    if (pendingWrites.current.size === 0) return;
+    for (const [giftId, expected] of pendingWrites.current) {
+      const g = gifts.find((g) => g.id === giftId);
+      if (
+        g &&
+        Math.abs(g.x - expected.expectedX) < 1e-3 &&
+        Math.abs(g.y - expected.expectedY) < 1e-3
+      ) {
+        pendingWrites.current.delete(giftId);
+        const el = clusterRefs.current.get(giftId);
+        if (el) el.style.transform = "";
+      }
+    }
   }, [gifts]);
 
   // No dependency array: fires after every render so the transform is applied
@@ -182,7 +232,11 @@ export default function ChartSky() {
         }
         if (clusterDragRef.current.committed) {
           const el = clusterRefs.current.get(clusterDragRef.current.giftId);
-          if (el) el.style.transform = `translate(${dx}px, ${dy}px)`;
+          if (el) {
+            const totalDx = clusterDragRef.current.baseOffsetX + dx;
+            const totalDy = clusterDragRef.current.baseOffsetY + dy;
+            el.style.transform = `translate(${totalDx}px, ${totalDy}px)`;
+          }
         }
         return;
       }
@@ -203,9 +257,11 @@ export default function ChartSky() {
       if (e.pointerId !== activePointerId.current) return;
       activePointerId.current = null;
 
-      // Cluster-drag commit: write new x/y to the gift row, then drop
-      // the inline transform so the realtime row update can take over
-      // visually without a flicker.
+      // Cluster-drag commit: write new x/y to the gift row. Keep the
+      // inline drag transform applied; it gets cleared by the effect
+      // above once the realtime row reflects the new position. On
+      // failure we animate the transform back to (0, 0) so the user
+      // sees a clear "didn't take" instead of a silent revert.
       const cd = clusterDragRef.current;
       if (cd?.committed) {
         const dxPx = e.clientX - cd.px;
@@ -214,31 +270,62 @@ export default function ChartSky() {
         // 1/(2 × innerWidth) of normalized canvas space.
         const dxNorm = dxPx / (window.innerWidth * 2);
         const dyNorm = dyPx / (window.innerHeight * 2);
-        const giftSnapshot = giftsRef.current.find((g) => g.id === cd.giftId);
-        if (giftSnapshot) {
-          const newX = clampAnchor(giftSnapshot.x + dxNorm);
-          const newY = clampAnchor(giftSnapshot.y + dyNorm);
+        const giftId = cd.giftId;
+        const wrapper = clusterRefs.current.get(giftId);
+        // If there is a pending (unconfirmed) write for this gift, use its
+        // expected position as the base so a second drag compounds correctly
+        // on top of the first. Otherwise fall back to the last realtime
+        // snapshot.
+        const pendingBase = pendingWrites.current.get(giftId);
+        const giftSnapshot = giftsRef.current.find((g) => g.id === giftId);
+        const baseX = pendingBase?.expectedX ?? giftSnapshot?.x;
+        const baseY = pendingBase?.expectedY ?? giftSnapshot?.y;
+        if (baseX != null && baseY != null) {
+          const newX = clampAnchor(baseX + dxNorm);
+          const newY = clampAnchor(baseY + dyNorm);
           // Only write when the position actually changed past the
           // 4-decimal precision we serialize at — InstantDB happily
           // accepts no-op updates, but they're noise on the wire.
           if (
-            Math.abs(newX - giftSnapshot.x) > 1e-4 ||
-            Math.abs(newY - giftSnapshot.y) > 1e-4
+            Math.abs(newX - baseX) > 1e-4 ||
+            Math.abs(newY - baseY) > 1e-4
           ) {
-            // Fire-and-forget the position write, but log denials
-            // (e.g. perms not yet pushed) and network errors instead
-            // of letting them surface as unhandled promise rejections.
-            // No user-facing recovery — the optimistic re-render
-            // collapses on the next realtime row replay.
+            pendingWrites.current.set(giftId, {
+              expectedX: newX,
+              expectedY: newY,
+            });
             db.transact(
-              db.tx.gifts[cd.giftId].update({ x: newX, y: newY }),
+              db.tx.gifts[giftId].update({ x: newX, y: newY }),
             ).catch((err) => {
               console.warn("[chart-sky] cluster reposition failed", err);
+              pendingWrites.current.delete(giftId);
+              // Animate the transform back to origin so the snap-back
+              // reads as a deliberate "didn't take" rather than a
+              // glitch. Cancel any previous failure animation and store
+              // the new timeout so a subsequent drag can cancel it.
+              if (wrapper) {
+                cancelFailTimeout(giftId);
+                wrapper.style.transition = "transform 220ms ease-out";
+                wrapper.style.transform = "";
+                const tid = window.setTimeout(() => {
+                  if (wrapper) wrapper.style.transition = "";
+                  failTimeouts.current.delete(giftId);
+                }, 240);
+                failTimeouts.current.set(giftId, tid);
+              }
             });
+          } else if (wrapper) {
+            // No-op drag (sub-threshold movement from base) — restore the
+            // wrapper to the baseOffset transform that was already applied
+            // at drag start. If a pending write is in-flight, keep its
+            // transform; otherwise clear it entirely.
+            wrapper.style.transform = pendingBase
+              ? `translate(${cd.baseOffsetX}px, ${cd.baseOffsetY}px)`
+              : "";
           }
+        } else if (wrapper) {
+          wrapper.style.transform = "";
         }
-        const el = clusterRefs.current.get(cd.giftId);
-        if (el) el.style.transform = "";
       }
       clusterDragRef.current = null;
       dragState.current = null;
@@ -262,11 +349,32 @@ export default function ChartSky() {
     const giftId = giftEl?.getAttribute("data-gift-id");
     if (giftId) {
       activePointerId.current = e.pointerId;
+      // Read the cluster's current inline transform offset so that a
+      // second drag while the first pending write is in-flight starts from
+      // the right visual anchor and doesn't cause a jump.
+      let baseOffsetX = 0;
+      let baseOffsetY = 0;
+      const wrapper = clusterRefs.current.get(giftId);
+      // If a failure-revert animation is in progress for this cluster,
+      // cancel it and clear the transition immediately so per-frame
+      // transform updates during the new drag aren't accidentally animated.
+      cancelFailTimeout(giftId);
+      if (wrapper?.style.transform) {
+        const m = wrapper.style.transform.match(
+          /translate\(\s*(-?[\d.]+(?:e[+-]?\d+)?)px,\s*(-?[\d.]+(?:e[+-]?\d+)?)px\s*\)/,
+        );
+        if (m) {
+          baseOffsetX = parseFloat(m[1]) || 0;
+          baseOffsetY = parseFloat(m[2]) || 0;
+        }
+      }
       clusterDragRef.current = {
         giftId,
         px: e.clientX,
         py: e.clientY,
         committed: false,
+        baseOffsetX,
+        baseOffsetY,
       };
       dragMoved.current = false;
       // Cursor feedback: same `grab → grabbing` state as the pan
