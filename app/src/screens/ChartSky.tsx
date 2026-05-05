@@ -29,9 +29,13 @@ import {
 import { expandClusterPositions } from "../lib/starPositioning";
 import { db } from "../db/client";
 
-// Bounds for repositioning. Match the clamp used by
-// `expandClusterPositions` so a dragged anchor never pushes its
-// satellites past the visible canvas edges.
+// Bounds for the dragged anchor. Intentionally a touch tighter than
+// `starPositioning.ts`'s satellite clamp (0.04..0.96): the anchor
+// itself is the cluster's first star, so we keep it well clear of
+// the canvas edge rather than relying on the satellite-only clamp
+// to rescue it. The satellite clamp still runs at render time, so
+// off-anchor satellites that would otherwise spill past the edge
+// get pulled back to 0.04..0.96.
 const ANCHOR_MIN = 0.05;
 const ANCHOR_MAX = 0.95;
 // Movement threshold (in screen pixels) before a press becomes a drag.
@@ -221,9 +225,16 @@ export default function ChartSky() {
             Math.abs(newX - giftSnapshot.x) > 1e-4 ||
             Math.abs(newY - giftSnapshot.y) > 1e-4
           ) {
-            void db.transact(
+            // Fire-and-forget the position write, but log denials
+            // (e.g. perms not yet pushed) and network errors instead
+            // of letting them surface as unhandled promise rejections.
+            // No user-facing recovery — the optimistic re-render
+            // collapses on the next realtime row replay.
+            db.transact(
               db.tx.gifts[cd.giftId].update({ x: newX, y: newY }),
-            );
+            ).catch((err) => {
+              console.warn("[chart-sky] cluster reposition failed", err);
+            });
           }
         }
         const el = clusterRefs.current.get(cd.giftId);
@@ -258,6 +269,9 @@ export default function ChartSky() {
         committed: false,
       };
       dragMoved.current = false;
+      // Cursor feedback: same `grab → grabbing` state as the pan
+      // gesture so the surface acknowledges the press immediately.
+      setIsDragging(true);
       return;
     }
     activePointerId.current = e.pointerId;
@@ -379,7 +393,19 @@ export default function ChartSky() {
                       if (el) clusterRefs.current.set(gift.id, el);
                       else clusterRefs.current.delete(gift.id);
                     }}
-                    style={{ position: "absolute", inset: 0 }}
+                    // The wrapper is full-canvas (so its child stars can
+                    // position via `%`), but `pointer-events: none` lets
+                    // empty-sky presses pass through to the pan surface
+                    // underneath. Stars themselves set `pointer-events:
+                    // auto` in Star.module.css, so the press only lands
+                    // here when the pointer is actually on a star image —
+                    // the press handler then walks `closest('[data-gift-id]')`
+                    // back up to identify the cluster.
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      pointerEvents: "none",
+                    }}
                   >
                     {positions.map((pos, idx) => (
                       <Star
