@@ -193,10 +193,24 @@ export default function ChartSky() {
       if (!dragMoved.current && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
         dragMoved.current = true;
       }
-      panRef.current = clampedPan(
+      const next = clampedPan(
         dragState.current.panX + dx,
         dragState.current.panY + dy,
       );
+      // Re-anchor the drag origin whenever the pan is clamped at an edge.
+      // Without this, overshooting the boundary accumulates in the delta so
+      // the user must drag back through the entire overshoot before the
+      // canvas starts moving again — making panning feel broken after
+      // hitting an edge.
+      if (next.x !== dragState.current.panX + dx) {
+        dragState.current.panX = next.x;
+        dragState.current.px = e.clientX;
+      }
+      if (next.y !== dragState.current.panY + dy) {
+        dragState.current.panY = next.y;
+        dragState.current.py = e.clientY;
+      }
+      panRef.current = next;
       applyTransform();
     }
     function onUp(e: PointerEvent) {
