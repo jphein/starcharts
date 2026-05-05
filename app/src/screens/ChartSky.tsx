@@ -100,6 +100,19 @@ export default function ChartSky() {
   const activePointerId = useRef<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Cancel any in-progress failure-revert animation for a cluster, clearing
+  // both the scheduled timeout and the CSS transition so that subsequent
+  // per-frame transform updates are not accidentally animated.
+  function cancelFailTimeout(id: string) {
+    const tid = failTimeouts.current.get(id);
+    if (tid !== undefined) {
+      window.clearTimeout(tid);
+      failTimeouts.current.delete(id);
+      const el = clusterRefs.current.get(id);
+      if (el) el.style.transition = "";
+    }
+  }
+
   function applyTransform() {
     if (!canvasRef.current) return;
     canvasRef.current.style.transform =
@@ -265,8 +278,8 @@ export default function ChartSky() {
         // snapshot.
         const pendingBase = pendingWrites.current.get(giftId);
         const giftSnapshot = giftsRef.current.find((g) => g.id === giftId);
-        const baseX = pendingBase ? pendingBase.expectedX : giftSnapshot?.x;
-        const baseY = pendingBase ? pendingBase.expectedY : giftSnapshot?.y;
+        const baseX = pendingBase?.expectedX ?? giftSnapshot?.x;
+        const baseY = pendingBase?.expectedY ?? giftSnapshot?.y;
         if (baseX != null && baseY != null) {
           const newX = clampAnchor(baseX + dxNorm);
           const newY = clampAnchor(baseY + dyNorm);
@@ -291,8 +304,7 @@ export default function ChartSky() {
               // glitch. Cancel any previous failure animation and store
               // the new timeout so a subsequent drag can cancel it.
               if (wrapper) {
-                const existing = failTimeouts.current.get(giftId);
-                if (existing !== undefined) window.clearTimeout(existing);
+                cancelFailTimeout(giftId);
                 wrapper.style.transition = "transform 220ms ease-out";
                 wrapper.style.transform = "";
                 const tid = window.setTimeout(() => {
@@ -346,12 +358,7 @@ export default function ChartSky() {
       // If a failure-revert animation is in progress for this cluster,
       // cancel it and clear the transition immediately so per-frame
       // transform updates during the new drag aren't accidentally animated.
-      const existing = failTimeouts.current.get(giftId);
-      if (existing !== undefined) {
-        window.clearTimeout(existing);
-        failTimeouts.current.delete(giftId);
-        if (wrapper) wrapper.style.transition = "";
-      }
+      cancelFailTimeout(giftId);
       if (wrapper?.style.transform) {
         const m = wrapper.style.transform.match(
           /translate\(\s*(-?[\d.]+)px,\s*(-?[\d.]+)px\s*\)/,
