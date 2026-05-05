@@ -12,6 +12,10 @@ export interface StarProps {
   onClick?: () => void;
   alt: string;
   delay?: number;
+  // When set, emitted as a `data-gift-id` attribute so a parent's
+  // pointer handler can `closest('[data-gift-id]')` to identify which
+  // cluster a press landed on (used by ChartSky's drag-to-reposition).
+  giftId?: string;
 }
 
 const COUNT_SCALE: Record<number, number> = { 1: 1.0, 2: 1.15, 3: 1.3, 5: 1.6 };
@@ -26,6 +30,7 @@ export function Star({
   onClick,
   alt,
   delay = 0,
+  giftId,
 }: StarProps) {
   const prefersReducedMotion = useReducedMotion();
 
@@ -105,6 +110,7 @@ export function Star({
       tabIndex={interactive ? 0 : undefined}
       onKeyDown={interactive ? handleKeyDown : undefined}
       aria-label={interactive ? alt : undefined}
+      data-gift-id={giftId}
     />
   );
 }
