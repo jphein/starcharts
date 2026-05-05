@@ -137,6 +137,12 @@ starcharts/
   key to the browser. Rate-limited per group/day and per-IP/hour via a
   Cloudflare KV namespace — see
   [RUNBOOK → Summon rate-limits](./RUNBOOK.md#summon-rate-limits).
+- **Invite-code lookup:** the same Worker exposes `POST /api/join-group`,
+  which resolves an invite code to a `groupId` using the InstantDB admin
+  token. This lets `groups.view` stay locked to members only —
+  enumeration of the 32⁶ ≈ 1B keyspace is rate-limited per IP at the
+  edge. See [`worker/README.md`](./worker/README.md) for endpoint shape
+  and bucket sizes.
 - **Versioning:** `app/scripts/version.mjs` writes `/version.json` at build
   with git metadata (hash, branch, dirty, built). It runs as both `predev`
   and `prebuild` so the file is present in `npm run dev` too. Realm word
@@ -247,6 +253,36 @@ crosses `goalCount`. From that moment, every member's client routes to
 `/charts/:id/celebrate`, and afterwards to `/charts/:id/memory`. Past
 charts are never deleted — they keep their shape forever.
 
+The chart sky is **pannable** (drag empty space) and gift clusters are
+**draggable** (press-hold a star and drag) so members can arrange the
+sky intentionally. The giver of a gift can also remove their own stars
+from `/charts/:id` via the **Remove gift** affordance in the gift card;
+once a chart is sealed into memory, removal is no longer surfaced (the
+memory view stays read-only by design).
+
+---
+
+## ✦ Permissions, in one breath
+
+InstantDB permission rules live at
+[`app/src/instant.perms.ts`](./app/src/instant.perms.ts) and are pushed
+to production via `npx instant-cli push perms -a <APP_ID>` from `app/`.
+Summary:
+
+- **`$users`** — visible to self + group-mates only.
+- **`groups`** — view / rename: members only. Self-join: a non-member
+  can link themselves into `members` via the invite-code flow.
+  `inviteCode` and `createdAt` are immutable after creation.
+- **`charts`** — view: members of the chart's group. Update: only
+  `completedAt`, one-way `null` → timestamp. Everything else pinned at
+  creation.
+- **`gifts`** — view / create: members of the chart's group. Update:
+  `x`/`y` only (cluster repositioning). Delete: giver-only.
+
+Group enumeration is impractical from the public app: `groups.view` is
+locked to members, and the only way to discover a group id from outside
+is through the rate-limited `/api/join-group` Worker endpoint.
+
 ---
 
 ## ✦ Deploy
@@ -293,15 +329,25 @@ The non-negotiables, copied forward from the design brief:
 A handful of intentional shortcuts are listed in
 [`RUNBOOK.md` → Known limitations](./RUNBOOK.md#known-limitations-v1):
 unindexed `createdAt`, single-tenant InstantDB app id, best-effort
-presence, immutable gifts, magic-link mail still via InstantDB's
-locked template (only the app name + sender display-name are
-brandable from their dashboard). Each one has a documented
-migration path for when scale or polish demands it.
+presence, mostly-immutable gifts (only `x`/`y` editable, only by
+group members; only the giver can remove), magic-link mail still
+via InstantDB's locked template (only the app name + sender
+display-name are brandable from their dashboard). Each one has a
+documented migration path for when scale or polish demands it.
 
 Custom-star summons are rate-limited at the Cloudflare Worker —
-**10/group/day, 30/IP/hour** — to keep Azure spend bounded. See
+**10/group/day, 30/IP/hour** — to keep Azure spend bounded. The
+`/api/join-group` lookup is rate-limited at **10/IP/hour** so
+brute-force enumeration of the invite-code keyspace stays
+impractical. See
 [RUNBOOK → Summon rate-limits](./RUNBOOK.md#summon-rate-limits)
 for the constants and how to bump them.
+
+Tracked open issues:
+[#18](https://github.com/jphein/starcharts/issues/18) (custom domain
+TLS handshake — workers.dev fallback in place),
+[#9](https://github.com/jphein/starcharts/issues/9) (per-board
+collaborators — architecture exploration).
 
 ---
 
