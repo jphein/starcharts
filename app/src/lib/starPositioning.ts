@@ -105,7 +105,7 @@ export function expandClusterPositions(
     return [{ x: gift.x, y: gift.y }];
   }
 
-  const radius = n <= 3 ? 0.06 : 0.09;
+  const radius = n <= 3 ? 0.03 : 0.05;
   const rng = mulberry32(fnv1a(gift.id));
   const positions: { x: number; y: number }[] = [
     { x: gift.x, y: gift.y },
