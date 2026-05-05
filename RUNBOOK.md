@@ -530,10 +530,13 @@ These are intentional shortcuts to ship; revisit at scale.
   *connected* to the chart room; it does not survive page reloads or
   app backgrounding cleanly on mobile. Reasonable for a "who's
   looking right now" affordance, not for "who has read this chart".
-- **No undo on gift send.** Gifts are immutable once written. If
-  someone fat-fingers a send, the only path is to delete the row from
-  the InstantDB dashboard. Add an "undo within N seconds" timer if
-  this becomes a frequent ask.
+- **No edit on gift send; only the giver can remove.** Gifts are
+  immutable once written, so a fat-fingered prompt or count can't
+  be edited in place — the giver has to delete and re-send. The
+  `Remove gift` affordance in `<GiftCard>` is gated to the giver
+  (matches the `gifts.delete` perm rule). Non-givers who need a
+  gift removed must ask the giver, or operators can delete the
+  row from the InstantDB dashboard.
 - **Single-tenant InstantDB app.** The InstantDB app id is hardcoded
   in `app/src/db/client.ts`. Fine for one production deploy. For
   staging/preview environments, factor it to an env var.
@@ -612,19 +615,22 @@ Current rule set:
   renders display-name + avatar, but the email is exposed at the
   data layer. Update: locked to self only. Delete: blocked
   (InstantDB doesn't allow client-side `$users` deletes).
-- **`groups`** — view: any authed user (kept open for the
-  invite-code lookup; tightened by a Worker-side join endpoint
-  in a follow-up). Create: any authed user. Update: members,
-  with `inviteCode` and `createdAt` immutable so a member can't
-  rotate the invite code or rewrite the timestamp. Delete:
-  blocked.
+- **`groups`** — view: members only (closed via PR #14, once
+  the Worker's `/api/join-group` endpoint replaced the SPA's
+  direct invite-code lookup). Create: any authed user. Update:
+  two shapes — existing members may rename (`name` only,
+  `inviteCode` and `createdAt` immutable); a non-member may
+  self-join by linking themselves into `members` via the
+  invite-code flow. Delete: blocked.
 - **`charts`** — view / create: members of the chart's group.
-  Update: members, but only `completedAt` is mutable — `name`,
-  `goalCount`, `reward`, `createdAt` are pinned to their current
-  values and the chart's group link can't be re-associated.
+  Update: members, but only `completedAt` is mutable — and only
+  as a one-way transition from `null` to a timestamp. `name`,
+  `goalCount`, `reward`, `createdAt` are pinned at creation.
   Delete: blocked.
 - **`gifts`** — view / create: members of the chart's group.
-  Update / delete: blocked (gifts immutable per design).
+  Update: blocked (gifts immutable per design). Delete: the
+  giver may remove their own gift to correct a mistake; all
+  other deletes blocked.
 
 ---
 
