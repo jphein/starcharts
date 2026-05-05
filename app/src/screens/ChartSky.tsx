@@ -337,6 +337,12 @@ export default function ChartSky() {
     const giftId = giftEl?.getAttribute("data-gift-id");
     if (giftId) {
       activePointerId.current = e.pointerId;
+      // Read the cluster's current inline transform offset so that a
+      // second drag while the first pending write is in-flight starts from
+      // the right visual anchor and doesn't cause a jump.
+      let baseOffsetX = 0;
+      let baseOffsetY = 0;
+      const wrapper = clusterRefs.current.get(giftId);
       // If a failure-revert animation is in progress for this cluster,
       // cancel it and clear the transition immediately so per-frame
       // transform updates during the new drag aren't accidentally animated.
@@ -344,15 +350,8 @@ export default function ChartSky() {
       if (existing !== undefined) {
         window.clearTimeout(existing);
         failTimeouts.current.delete(giftId);
-        const wrapper = clusterRefs.current.get(giftId);
         if (wrapper) wrapper.style.transition = "";
       }
-      // Read the cluster's current inline transform offset so that a
-      // second drag while the first pending write is in-flight starts from
-      // the right visual anchor and doesn't cause a jump.
-      let baseOffsetX = 0;
-      let baseOffsetY = 0;
-      const wrapper = clusterRefs.current.get(giftId);
       if (wrapper?.style.transform) {
         const m = wrapper.style.transform.match(
           /translate\(\s*(-?[\d.]+)px,\s*(-?[\d.]+)px\s*\)/,
