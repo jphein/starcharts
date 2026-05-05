@@ -59,6 +59,19 @@
 //                rejects any change other than `name`, and
 //                `charts.update` rejects any change other than
 //                `completedAt`.
+//
+//   2026-05-05 — fixed invite-code join being blocked by groups.update.
+//                InstantDB checks update permissions on BOTH sides of a
+//                link operation, even when initiated from the $users side
+//                (`db.tx.$users[uid].link({ groups: gid })`). That means
+//                groups.update fires with modifiedFields = ['members'],
+//                which the old rule rejected (it only allowed 'name').
+//                Added a second clause to allow a non-member to add
+//                themselves: auth user is not yet a member, only the
+//                members link is being modified, and after the op the
+//                auth user appears in newData.ref('members.id') —
+//                confirming they are linking themselves, not adding or
+//                removing a third party.
 
 import type { InstantRules } from "@instantdb/react";
 
@@ -110,18 +123,32 @@ const rules = {
       // write proxy with admin auth would close this for real.
       create: "auth.id != null",
 
-      // Members can rename their group, but `inviteCode` and
-      // `createdAt` are immutable after creation — without this,
-      // any member could rotate the invite code (breaking the
-      // join flow for everyone else) or rewrite the group's
-      // birthday. Uses InstantDB's `request.modifiedFields` set
-      // so partial updates work cleanly: a `tx.update({name:…})`
-      // sets `modifiedFields = ['name']`, and the rule passes only
-      // if every entry in that set is `name`.
+      // Two permitted update shapes:
+      //
+      //   1. Rename — existing members can change the group name.
+      //      `inviteCode` and `createdAt` are immutable after creation.
+      //      Uses `modifiedFields` so a partial `{name:…}` update passes
+      //      without checking unchanged fields that would read as null.
+      //
+      //   2. Self-join — a non-member can add themselves via the members
+      //      link (invite-code flow). InstantDB checks groups.update on
+      //      BOTH sides of a link operation, so even when the SPA writes
+      //      `db.tx.$users[uid].link({ groups: gid })` (from the $users
+      //      side), groups.update still fires with modifiedFields=['members'].
+      //      Three guards keep this narrow:
+      //        a) !(auth.id in data.ref('members.id')) — caller is not yet
+      //           a member, so this path is unreachable by existing members.
+      //        b) request.modifiedFields.all(field, field == 'members') —
+      //           only the members link is touched; no attribute changes.
+      //        c) auth.id in newData.ref('members.id') — after the op the
+      //           caller is in the members list, confirming they are adding
+      //           themselves (not someone else, and not removing anyone).
       update:
-        "auth.id != null && " +
-        "auth.id in data.ref('members.id') && " +
-        "request.modifiedFields.all(field, field == 'name')",
+        "auth.id != null && (" +
+        "(auth.id in data.ref('members.id') && request.modifiedFields.all(field, field == 'name'))" +
+        " || " +
+        "(!(auth.id in data.ref('members.id')) && request.modifiedFields.all(field, field == 'members') && auth.id in newData.ref('members.id'))" +
+        ")",
 
       // No client-side group deletion in v1.
       delete: "false",
