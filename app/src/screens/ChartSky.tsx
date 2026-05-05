@@ -12,7 +12,7 @@
 // is in memory mode and we bounce to /charts/:id/memory instead.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { Sky } from "../components/Sky";
 import { LoadingSky } from "../components/LoadingSky";
@@ -35,6 +35,7 @@ function celebratedKey(chartId: string): string {
 export default function ChartSky() {
   const { id: chartId } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const { user, isLoading: userLoading } = useCurrentUser();
   const { group, isLoading: groupLoading } = useCurrentGroup();
@@ -84,6 +85,37 @@ export default function ChartSky() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  // After load, pan to the most-populated area of the sky.
+  // If we just returned from GiftFlow (navigate state carries focusX/focusY),
+  // center on the new gift instead so the user sees what they just sent up.
+  // The flag ensures we only set the initial position once per mount.
+  const initialPanDone = useRef(false);
+  useEffect(() => {
+    if (initialPanDone.current) return;
+
+    const state = location.state as { focusX?: number; focusY?: number } | null;
+    if (state?.focusX != null && state?.focusY != null) {
+      initialPanDone.current = true;
+      panRef.current = clampedPan(
+        window.innerWidth / 2 - state.focusX * window.innerWidth * 2,
+        window.innerHeight / 2 - state.focusY * window.innerHeight * 2,
+      );
+      applyTransform();
+      return;
+    }
+
+    if (giftsLoading || gifts.length === 0) return;
+
+    initialPanDone.current = true;
+    const cx = gifts.reduce((s, g) => s + g.x, 0) / gifts.length;
+    const cy = gifts.reduce((s, g) => s + g.y, 0) / gifts.length;
+    panRef.current = clampedPan(
+      window.innerWidth / 2 - cx * window.innerWidth * 2,
+      window.innerHeight / 2 - cy * window.innerHeight * 2,
+    );
+    applyTransform();
+  }, [location.state, giftsLoading, gifts]);
 
   // Global move/up listeners keep drag smooth when the pointer moves fast
   // off the pan surface, without using setPointerCapture (which redirects

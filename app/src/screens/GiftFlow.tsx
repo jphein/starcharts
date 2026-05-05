@@ -267,6 +267,9 @@ export default function GiftFlow() {
         wouldHitGoal
           ? `/charts/${chartId}/celebrate`
           : `/charts/${chartId}`,
+        wouldHitGoal
+          ? undefined
+          : { state: { focusX: anchor.x, focusY: anchor.y } },
       );
     } catch (err) {
       const message =
