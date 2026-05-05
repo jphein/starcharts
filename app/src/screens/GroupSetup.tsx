@@ -96,9 +96,11 @@ export default function GroupSetup() {
       // `groups.view` permission stay members-only — non-members
       // don't need direct read access to `groups` to join.
       const { groupId } = await joinGroupByCode(normalized);
-      // Now perform the link from the user's own auth context. The
-      // group's permission rules govern this, not the worker.
-      await db.transact(db.tx.groups[groupId].link({ members: user.id }));
+      // Link from the $users side so the permission check is
+      // $users.update ("auth.id == data.id") rather than
+      // groups.update ("auth.id in members") — the user isn't
+      // a member yet, so the groups.update rule always denies.
+      await db.transact(db.tx.$users[user.id].link({ groups: groupId }));
       setCurrentGroupId(groupId);
       navigate("/dashboard");
     } catch (err) {
