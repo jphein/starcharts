@@ -202,12 +202,6 @@ export default function ChartSky() {
           touchAction: "none",
         }}
         onPointerDown={handlePointerDown}
-<<<<<<< HEAD
-=======
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
->>>>>>> origin/main
         onClickCapture={handleClickCapture}
       >
         {/* Canvas — 2× the viewport, shifted so its centre fills the screen */}
