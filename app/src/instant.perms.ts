@@ -197,10 +197,10 @@ const rules = {
       create: "auth.id != null",
 
       // Gifts are immutable per design — once a star is sent, it
-      // stays. Mistaken sends are corrected by the InstantDB
-      // dashboard, not the client.
+      // stays. The giver may delete their own gift to correct a
+      // mistake; all other mutations remain blocked.
       update: "false",
-      delete: "false",
+      delete: "auth.id != null && auth.id in data.ref('giver.id')",
     },
   },
 } satisfies InstantRules;

@@ -289,6 +289,7 @@ export default function ChartSky() {
             key={selectedGift.id}
             gift={selectedGift}
             onClose={() => setSelectedGift(null)}
+            currentUserId={user.id}
           />
         )}
       </AnimatePresence>
