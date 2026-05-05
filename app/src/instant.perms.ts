@@ -72,6 +72,18 @@
 //                auth user appears in newData.ref('members.id') —
 //                confirming they are linking themselves, not adding or
 //                removing a third party.
+//
+//   2026-05-05 — opened gifts.update for x/y-only repositioning by group
+//                members (issue #25). Cluster drag re-anchors a gift on
+//                the chart sky; satellites recalculate deterministically
+//                from the new anchor in starPositioning.ts, so a single
+//                two-field write moves the whole cluster. Anything other
+//                than x/y is still rejected — reason, count, style, and
+//                starImageUrl remain immutable per the original gifts
+//                contract. Permitted to any group member rather than
+//                giver-only, to match the collaborative-arrangement
+//                framing in the issue ("spread stars out when it gets
+//                crowded, group stars from the same person together").
 
 import type { InstantRules } from "@instantdb/react";
 
@@ -223,10 +235,19 @@ const rules = {
       // link-rule pattern; tracked as the next perms task.
       create: "auth.id != null",
 
-      // Gifts are immutable per design — once a star is sent, it
-      // stays. The giver may delete their own gift to correct a
-      // mistake; all other mutations remain blocked.
-      update: "false",
+      // Gifts are mostly immutable. Two narrow exceptions:
+      //   1. Update — group members may reposition a cluster on the
+      //      sky by writing x/y. `request.modifiedFields.all(field, …)`
+      //      pins the update to those two fields; everything else
+      //      (reason, count, style, starImageUrl) stays as set at
+      //      creation. Anchored on chart membership, not giver, so any
+      //      group member can rearrange (issue #25).
+      //   2. Delete — the giver may remove their own gift to correct
+      //      a mistake; all other deletes blocked.
+      update:
+        "auth.id != null && " +
+        "auth.id in data.ref('chart.group.members.id') && " +
+        "request.modifiedFields.all(field, field == 'x' || field == 'y')",
       delete: "auth.id != null && auth.id in data.ref('giver.id')",
     },
   },

@@ -27,6 +27,20 @@ import {
   type GiftWithLinks,
 } from "../hooks/useGiftsForChart";
 import { expandClusterPositions } from "../lib/starPositioning";
+import { db } from "../db/client";
+
+// Bounds for the dragged anchor. Intentionally a touch tighter than
+// `starPositioning.ts`'s satellite clamp (0.04..0.96): the anchor
+// itself is the cluster's first star, so we keep it well clear of
+// the canvas edge rather than relying on the satellite-only clamp
+// to rescue it. The satellite clamp still runs at render time, so
+// off-anchor satellites that would otherwise spill past the edge
+// get pulled back to 0.04..0.96.
+const ANCHOR_MIN = 0.05;
+const ANCHOR_MAX = 0.95;
+// Movement threshold (in screen pixels) before a press becomes a drag.
+// Below this, a release fires the star's onClick (open GiftCard).
+const DRAG_THRESHOLD_PX = 5;
 
 function celebratedKey(chartId: string): string {
   return `sc_celebrated_${chartId}`;
@@ -44,16 +58,28 @@ export default function ChartSky() {
 
   const [selectedGift, setSelectedGift] = useState<GiftWithLinks | null>(null);
 
-  // ── Panning ──────────────────────────────────────────────────────────────
+  // ── Panning + cluster drag ───────────────────────────────────────────────
   const canvasRef = useRef<HTMLDivElement>(null);
   // Start centered on the 2× canvas so the full star field is reachable.
   const panRef = useRef({
     x: -(window.innerWidth / 2),
     y: -(window.innerHeight / 2),
   });
+  // Sky-pan gesture state (only set while panning the empty sky).
   const dragState = useRef<{
     px: number; py: number; panX: number; panY: number;
   } | null>(null);
+  // Cluster-drag gesture state (only set while a press started on a star).
+  // `committed` flips true once movement crosses DRAG_THRESHOLD_PX, at which
+  // point we stop suppressing onClick and start visually translating the
+  // cluster wrapper.
+  const clusterDragRef = useRef<{
+    giftId: string; px: number; py: number; committed: boolean;
+  } | null>(null);
+  // DOM refs for each cluster wrapper, keyed by gift id. We mutate
+  // `style.transform` directly during drag for per-frame smoothness instead
+  // of routing every pointermove through React state.
+  const clusterRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const dragMoved = useRef(false);
   const activePointerId = useRef<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -70,6 +96,20 @@ export default function ChartSky() {
       y: Math.min(0, Math.max(-window.innerHeight, y)),
     };
   }
+
+  function clampAnchor(v: number): number {
+    if (v < ANCHOR_MIN) return ANCHOR_MIN;
+    if (v > ANCHOR_MAX) return ANCHOR_MAX;
+    return v;
+  }
+
+  // The pointer handlers are attached once on mount, so they capture a
+  // stale `gifts` closure. Mirror it into a ref so onUp can resolve the
+  // current x/y of the dragged gift to compute the new position.
+  const giftsRef = useRef<GiftWithLinks[]>(gifts);
+  useEffect(() => {
+    giftsRef.current = gifts;
+  }, [gifts]);
 
   // No dependency array: fires after every render so the transform is applied
   // as soon as the canvas element actually mounts (the loading gate keeps it
@@ -120,9 +160,34 @@ export default function ChartSky() {
   // Global move/up listeners keep drag smooth when the pointer moves fast
   // off the pan surface, without using setPointerCapture (which redirects
   // click events away from stars and breaks tap-to-open).
+  //
+  // Two gesture state machines coexist — only one is live at a time:
+  //   - `dragState`         — sky pan
+  //   - `clusterDragRef`    — cluster reposition
+  // `handlePointerDown` decides which one to start based on whether the
+  // press landed on a `[data-gift-id]` element.
   useEffect(() => {
     function onMove(e: PointerEvent) {
-      if (e.pointerId !== activePointerId.current || !dragState.current) return;
+      if (e.pointerId !== activePointerId.current) return;
+
+      if (clusterDragRef.current) {
+        const dx = e.clientX - clusterDragRef.current.px;
+        const dy = e.clientY - clusterDragRef.current.py;
+        if (
+          !clusterDragRef.current.committed &&
+          (Math.abs(dx) > DRAG_THRESHOLD_PX || Math.abs(dy) > DRAG_THRESHOLD_PX)
+        ) {
+          clusterDragRef.current.committed = true;
+          dragMoved.current = true;
+        }
+        if (clusterDragRef.current.committed) {
+          const el = clusterRefs.current.get(clusterDragRef.current.giftId);
+          if (el) el.style.transform = `translate(${dx}px, ${dy}px)`;
+        }
+        return;
+      }
+
+      if (!dragState.current) return;
       const dx = e.clientX - dragState.current.px;
       const dy = e.clientY - dragState.current.py;
       if (!dragMoved.current && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
@@ -137,6 +202,45 @@ export default function ChartSky() {
     function onUp(e: PointerEvent) {
       if (e.pointerId !== activePointerId.current) return;
       activePointerId.current = null;
+
+      // Cluster-drag commit: write new x/y to the gift row, then drop
+      // the inline transform so the realtime row update can take over
+      // visually without a flicker.
+      const cd = clusterDragRef.current;
+      if (cd?.committed) {
+        const dxPx = e.clientX - cd.px;
+        const dyPx = e.clientY - cd.py;
+        // The canvas is 200vw × 200vh, so a 1px screen delta is
+        // 1/(2 × innerWidth) of normalized canvas space.
+        const dxNorm = dxPx / (window.innerWidth * 2);
+        const dyNorm = dyPx / (window.innerHeight * 2);
+        const giftSnapshot = giftsRef.current.find((g) => g.id === cd.giftId);
+        if (giftSnapshot) {
+          const newX = clampAnchor(giftSnapshot.x + dxNorm);
+          const newY = clampAnchor(giftSnapshot.y + dyNorm);
+          // Only write when the position actually changed past the
+          // 4-decimal precision we serialize at — InstantDB happily
+          // accepts no-op updates, but they're noise on the wire.
+          if (
+            Math.abs(newX - giftSnapshot.x) > 1e-4 ||
+            Math.abs(newY - giftSnapshot.y) > 1e-4
+          ) {
+            // Fire-and-forget the position write, but log denials
+            // (e.g. perms not yet pushed) and network errors instead
+            // of letting them surface as unhandled promise rejections.
+            // No user-facing recovery — the optimistic re-render
+            // collapses on the next realtime row replay.
+            db.transact(
+              db.tx.gifts[cd.giftId].update({ x: newX, y: newY }),
+            ).catch((err) => {
+              console.warn("[chart-sky] cluster reposition failed", err);
+            });
+          }
+        }
+        const el = clusterRefs.current.get(cd.giftId);
+        if (el) el.style.transform = "";
+      }
+      clusterDragRef.current = null;
       dragState.current = null;
       setIsDragging(false);
     }
@@ -152,6 +256,24 @@ export default function ChartSky() {
 
   function handlePointerDown(e: React.PointerEvent) {
     if (e.button !== 0) return;
+    // Press on a cluster → candidate cluster-drag (don't pan the sky).
+    // Press on empty sky → sky-pan (existing behaviour).
+    const giftEl = (e.target as HTMLElement).closest("[data-gift-id]");
+    const giftId = giftEl?.getAttribute("data-gift-id");
+    if (giftId) {
+      activePointerId.current = e.pointerId;
+      clusterDragRef.current = {
+        giftId,
+        px: e.clientX,
+        py: e.clientY,
+        committed: false,
+      };
+      dragMoved.current = false;
+      // Cursor feedback: same `grab → grabbing` state as the pan
+      // gesture so the surface acknowledges the press immediately.
+      setIsDragging(true);
+      return;
+    }
     activePointerId.current = e.pointerId;
     dragState.current = {
       px: e.clientX, py: e.clientY,
@@ -161,7 +283,8 @@ export default function ChartSky() {
     setIsDragging(true);
   }
 
-  // Suppress star clicks that are actually the end of a drag gesture.
+  // Suppress star clicks that are actually the end of a drag gesture
+  // (either pan or cluster reposition).
   function handleClickCapture(e: React.MouseEvent) {
     if (dragMoved.current) {
       e.stopPropagation();
@@ -250,30 +373,58 @@ export default function ChartSky() {
         >
           <Sky style={{ height: "200vh" }} />
 
-          {/* Stars are siblings of Sky so their % coords span the full canvas */}
+          {/* Stars are siblings of Sky so their % coords span the full canvas.
+              Each gift gets its own `[data-gift-id]` wrapper so the cluster
+              can be translated as a unit during drag (and so handlePointerDown
+              can identify which cluster a press landed on via .closest()). */}
           <div style={{ position: "absolute", inset: 0 }}>
             {!giftsLoading &&
-              gifts.flatMap((gift) => {
+              gifts.map((gift) => {
                 const positions = expandClusterPositions(gift);
                 const altBase =
                   gift.reason.length > 60
                     ? `${gift.reason.slice(0, 57)}…`
                     : gift.reason;
-                return positions.map((pos, idx) => (
-                  <Star
-                    key={`${gift.id}-${idx}`}
-                    style={gift.style}
-                    customImageUrl={
-                      gift.style === "custom" ? gift.starImageUrl : undefined
-                    }
-                    x={pos.x}
-                    y={pos.y}
-                    count={normalizeCount(gift.count)}
-                    onClick={() => setSelectedGift(gift)}
-                    alt={altBase}
-                    delay={(idx % 5) * 0.4}
-                  />
-                ));
+                return (
+                  <div
+                    key={gift.id}
+                    data-gift-id={gift.id}
+                    ref={(el) => {
+                      if (el) clusterRefs.current.set(gift.id, el);
+                      else clusterRefs.current.delete(gift.id);
+                    }}
+                    // The wrapper is full-canvas (so its child stars can
+                    // position via `%`), but `pointer-events: none` lets
+                    // empty-sky presses pass through to the pan surface
+                    // underneath. Stars themselves set `pointer-events:
+                    // auto` in Star.module.css, so the press only lands
+                    // here when the pointer is actually on a star image —
+                    // the press handler then walks `closest('[data-gift-id]')`
+                    // back up to identify the cluster.
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      pointerEvents: "none",
+                    }}
+                  >
+                    {positions.map((pos, idx) => (
+                      <Star
+                        key={idx}
+                        giftId={gift.id}
+                        style={gift.style}
+                        customImageUrl={
+                          gift.style === "custom" ? gift.starImageUrl : undefined
+                        }
+                        x={pos.x}
+                        y={pos.y}
+                        count={normalizeCount(gift.count)}
+                        onClick={() => setSelectedGift(gift)}
+                        alt={altBase}
+                        delay={(idx % 5) * 0.4}
+                      />
+                    ))}
+                  </div>
+                );
               })}
           </div>
         </div>
