@@ -5,13 +5,15 @@
 // formatted date. Backdrop or Escape closes it. Scrolls internally if
 // content is taller than the viewport.
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { GiftWithLinks } from "../hooks/useGiftsForChart";
+import { db } from "../db/client";
 
 interface GiftCardProps {
   gift: GiftWithLinks;
   onClose: () => void;
+  currentUserId?: string;
 }
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
@@ -20,8 +22,23 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
 });
 
-export function GiftCard({ gift, onClose }: GiftCardProps) {
+export function GiftCard({ gift, onClose, currentUserId }: GiftCardProps) {
   const prefersReducedMotion = useReducedMotion();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const isGiver = currentUserId != null && gift.giver?.id === currentUserId;
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await db.transact(db.tx.gifts[gift.id].delete());
+      onClose();
+    } catch {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -99,6 +116,33 @@ export function GiftCard({ gift, onClose }: GiftCardProps) {
           <div style={footerStyle}>
             from {giverName} · {countLabel} · {dateLabel}
           </div>
+
+          {isGiver && (
+            <div style={deleteWrapStyle}>
+              {confirmDelete ? (
+                <div style={confirmRowStyle}>
+                  <span style={confirmTextStyle}>Remove this gift?</span>
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    style={confirmBtnStyle}
+                  >
+                    {deleting ? "Removing…" : "Yes, remove"}
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    style={cancelBtnStyle}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmDelete(true)} style={deleteBtnStyle}>
+                  Remove gift
+                </button>
+              )}
+            </div>
+          )}
         </motion.div>
       </motion.div>
     </AnimatePresence>
@@ -205,4 +249,58 @@ const footerStyle: React.CSSProperties = {
   color: "var(--sc-fg-faint)",
   paddingTop: 14,
   borderTop: "1px solid var(--sc-stroke)",
+};
+
+const deleteWrapStyle: React.CSSProperties = {
+  marginTop: 20,
+  paddingTop: 16,
+  borderTop: "1px solid var(--sc-stroke)",
+};
+
+const deleteBtnStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "none",
+  cursor: "pointer",
+  fontFamily: "var(--sc-sans)",
+  fontSize: 11,
+  letterSpacing: "0.06em",
+  color: "var(--sc-fg-faint)",
+  padding: 0,
+  textDecoration: "underline",
+  textUnderlineOffset: 3,
+};
+
+const confirmRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const confirmTextStyle: React.CSSProperties = {
+  fontFamily: "var(--sc-sans)",
+  fontSize: 11,
+  color: "var(--sc-fg-muted)",
+};
+
+const confirmBtnStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "1px solid var(--sc-stroke)",
+  borderRadius: 999,
+  cursor: "pointer",
+  fontFamily: "var(--sc-sans)",
+  fontSize: 11,
+  color: "var(--sc-fg)",
+  padding: "4px 12px",
+};
+
+const cancelBtnStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "none",
+  cursor: "pointer",
+  fontFamily: "var(--sc-sans)",
+  fontSize: 11,
+  color: "var(--sc-fg-faint)",
+  padding: "4px 8px",
 };
