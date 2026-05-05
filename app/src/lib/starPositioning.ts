@@ -17,6 +17,9 @@ const MIN_AXIS = 0.05;
 const MAX_AXIS = 0.95;
 const DEFAULT_MIN_DIST = 0.06;
 const ANCHOR_ATTEMPTS = 10;
+// New gifts search within this radius of the existing cluster centroid so
+// the sky stays dense rather than spreading across the entire canvas.
+const CLUSTER_SEARCH_RADIUS = 0.12;
 
 const CLAMP_MIN = 0.04;
 const CLAMP_MAX = 0.96;
@@ -49,15 +52,30 @@ export function pickGiftAnchor(
   existingGifts: AnchorInput[],
   minDist: number = DEFAULT_MIN_DIST,
 ): { x: number; y: number } {
-  let bestPoint = { x: rand(MIN_AXIS, MAX_AXIS), y: rand(MIN_AXIS, MAX_AXIS) };
+  // First gift lands near the center of the canvas so the user sees it
+  // immediately without panning.
+  if (existingGifts.length === 0) {
+    return { x: rand(0.4, 0.6), y: rand(0.4, 0.6) };
+  }
+
+  // Subsequent gifts search near the centroid of existing anchors so the
+  // sky stays as a single cluster instead of scattering across the canvas.
+  const cx = existingGifts.reduce((s, g) => s + g.x, 0) / existingGifts.length;
+  const cy = existingGifts.reduce((s, g) => s + g.y, 0) / existingGifts.length;
+
+  function nearCentroid() {
+    return {
+      x: Math.min(MAX_AXIS, Math.max(MIN_AXIS, cx + rand(-CLUSTER_SEARCH_RADIUS, CLUSTER_SEARCH_RADIUS))),
+      y: Math.min(MAX_AXIS, Math.max(MIN_AXIS, cy + rand(-CLUSTER_SEARCH_RADIUS, CLUSTER_SEARCH_RADIUS))),
+    };
+  }
+
+  let bestPoint = nearCentroid();
   let bestScore = minDistanceTo(bestPoint, existingGifts);
   if (bestScore >= minDist) return bestPoint;
 
   for (let i = 1; i < ANCHOR_ATTEMPTS; i++) {
-    const candidate = {
-      x: rand(MIN_AXIS, MAX_AXIS),
-      y: rand(MIN_AXIS, MAX_AXIS),
-    };
+    const candidate = nearCentroid();
     const score = minDistanceTo(candidate, existingGifts);
     if (score >= minDist) return candidate;
     if (score > bestScore) {
