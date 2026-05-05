@@ -80,6 +80,14 @@ export default function ChartSky() {
   // `style.transform` directly during drag for per-frame smoothness instead
   // of routing every pointermove through React state.
   const clusterRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  // Per-gift "we wrote this position, waiting for realtime to confirm" map.
+  // While a write is in-flight, we keep the inline drag transform applied
+  // so the cluster doesn't snap back to its old anchor in the gap before
+  // the row update arrives. The effect below clears the transform once
+  // the gift's x/y in `gifts` matches what we wrote.
+  const pendingWrites = useRef<
+    Map<string, { expectedX: number; expectedY: number }>
+  >(new Map());
   const dragMoved = useRef(false);
   const activePointerId = useRef<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -109,6 +117,27 @@ export default function ChartSky() {
   const giftsRef = useRef<GiftWithLinks[]>(gifts);
   useEffect(() => {
     giftsRef.current = gifts;
+  }, [gifts]);
+
+  // When a realtime row update arrives, drop the inline drag transform
+  // for any cluster whose pending position has now caught up. This is
+  // what eliminates the snap-back-then-update flash on the success path:
+  // we keep the drag transform applied through the round-trip and only
+  // clear it when the row's stored x/y matches what we wrote.
+  useEffect(() => {
+    if (pendingWrites.current.size === 0) return;
+    for (const [giftId, expected] of pendingWrites.current) {
+      const g = gifts.find((g) => g.id === giftId);
+      if (
+        g &&
+        Math.abs(g.x - expected.expectedX) < 1e-3 &&
+        Math.abs(g.y - expected.expectedY) < 1e-3
+      ) {
+        pendingWrites.current.delete(giftId);
+        const el = clusterRefs.current.get(giftId);
+        if (el) el.style.transform = "";
+      }
+    }
   }, [gifts]);
 
   // No dependency array: fires after every render so the transform is applied
@@ -203,9 +232,11 @@ export default function ChartSky() {
       if (e.pointerId !== activePointerId.current) return;
       activePointerId.current = null;
 
-      // Cluster-drag commit: write new x/y to the gift row, then drop
-      // the inline transform so the realtime row update can take over
-      // visually without a flicker.
+      // Cluster-drag commit: write new x/y to the gift row. Keep the
+      // inline drag transform applied; it gets cleared by the effect
+      // above once the realtime row reflects the new position. On
+      // failure we animate the transform back to (0, 0) so the user
+      // sees a clear "didn't take" instead of a silent revert.
       const cd = clusterDragRef.current;
       if (cd?.committed) {
         const dxPx = e.clientX - cd.px;
@@ -215,6 +246,8 @@ export default function ChartSky() {
         const dxNorm = dxPx / (window.innerWidth * 2);
         const dyNorm = dyPx / (window.innerHeight * 2);
         const giftSnapshot = giftsRef.current.find((g) => g.id === cd.giftId);
+        const giftId = cd.giftId;
+        const wrapper = clusterRefs.current.get(giftId);
         if (giftSnapshot) {
           const newX = clampAnchor(giftSnapshot.x + dxNorm);
           const newY = clampAnchor(giftSnapshot.y + dyNorm);
@@ -225,20 +258,35 @@ export default function ChartSky() {
             Math.abs(newX - giftSnapshot.x) > 1e-4 ||
             Math.abs(newY - giftSnapshot.y) > 1e-4
           ) {
-            // Fire-and-forget the position write, but log denials
-            // (e.g. perms not yet pushed) and network errors instead
-            // of letting them surface as unhandled promise rejections.
-            // No user-facing recovery — the optimistic re-render
-            // collapses on the next realtime row replay.
+            pendingWrites.current.set(giftId, {
+              expectedX: newX,
+              expectedY: newY,
+            });
             db.transact(
-              db.tx.gifts[cd.giftId].update({ x: newX, y: newY }),
+              db.tx.gifts[giftId].update({ x: newX, y: newY }),
             ).catch((err) => {
               console.warn("[chart-sky] cluster reposition failed", err);
+              pendingWrites.current.delete(giftId);
+              // Animate the transform back to origin so the snap-back
+              // reads as a deliberate "didn't take" rather than a
+              // glitch. Cleared after the transition finishes so future
+              // drags start from a clean slate.
+              if (wrapper) {
+                wrapper.style.transition = "transform 220ms ease-out";
+                wrapper.style.transform = "";
+                window.setTimeout(() => {
+                  if (wrapper) wrapper.style.transition = "";
+                }, 240);
+              }
             });
+          } else if (wrapper) {
+            // No-op write skipped → drop the inline drag transform now
+            // since no realtime echo is coming.
+            wrapper.style.transform = "";
           }
+        } else if (wrapper) {
+          wrapper.style.transform = "";
         }
-        const el = clusterRefs.current.get(cd.giftId);
-        if (el) el.style.transform = "";
       }
       clusterDragRef.current = null;
       dragState.current = null;
