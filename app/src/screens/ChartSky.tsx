@@ -361,7 +361,7 @@ export default function ChartSky() {
       cancelFailTimeout(giftId);
       if (wrapper?.style.transform) {
         const m = wrapper.style.transform.match(
-          /translate\(\s*(-?[\d.]+)px,\s*(-?[\d.]+)px\s*\)/,
+          /translate\(\s*(-?[\d.]+(?:e[+-]?\d+)?)px,\s*(-?[\d.]+(?:e[+-]?\d+)?)px\s*\)/,
         );
         if (m) {
           baseOffsetX = parseFloat(m[1]) || 0;
