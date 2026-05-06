@@ -207,9 +207,12 @@ const rules = {
       //      toggle-loops that would retrigger the celebrate scene.
       //   2. goalCount-only: retune the goal mid-chart (issue #44).
       //      Allowed only while the chart is incomplete; the new value
-      //      must be positive. The "≥ current star total" floor is
-      //      UI-enforced because rules can't cheaply aggregate gift
-      //      counts.
+      //      must be positive. Integerness is a UI convention (the
+      //      schema is i.number(), and charts.create has never enforced
+      //      integers either) — keeping the two paths symmetric rather
+      //      than gating only the edit path on integer-ness. The
+      //      "≥ current star total" floor is also UI-enforced because
+      //      rules can't cheaply aggregate gift counts.
       //
       // Both paths use `request.modifiedFields.all(field, …)` so a
       // partial update is field-pinned: only the listed field may

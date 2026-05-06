@@ -81,8 +81,14 @@ export function GoalCapsule({
   };
 
   const commitEdit = async () => {
-    if (!draftValid || submitting || parsedDraft === goalCount) {
-      // No-op commits (unchanged value, invalid input) just exit edit mode.
+    if (submitting) return;
+    // Invalid drafts (empty, zero, < currentTotal) keep the editor open so
+    // the user can correct — Enter is a no-op while belowMin or otherwise
+    // invalid, and the inline caption explains why. Cancel still exits via
+    // Esc/blur.
+    if (!draftValid) return;
+    // Unchanged values exit cleanly without firing a transact.
+    if (parsedDraft === goalCount) {
       setEditing(false);
       return;
     }
