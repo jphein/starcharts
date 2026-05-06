@@ -1,15 +1,19 @@
 // Frontend client for the Worker's /api/join-group endpoint.
 //
-// The Worker accepts `{ inviteCode }`, looks up the group with the
-// admin token, and returns `{ groupId, name }`. Letting the Worker
-// own this resolution means the SPA's `groups.view` permission can
-// be locked to members — non-members never need to query `groups`
-// directly to join.
+// The Worker accepts `{ inviteCode, refreshToken }`. It verifies
+// the refresh token (so it can identify the caller without trusting
+// a userId from the SPA), looks up the group with the admin token,
+// and links the verified user to the group via admin transact —
+// then returns `{ groupId, name }`.
+//
+// Owning the link op server-side is what lets `groups.update` stay
+// rename-only: no client-side path can touch the members link.
 //
 // On a 404 (no group with that code), the Worker returns a
 // distinct error message; we surface that as the same kind of
 // JoinError as everything else so the UI can render a single
-// failure path.
+// failure path. 401 (invalid auth token) is also surfaced as a
+// JoinError — the UI prompts the user to re-sign-in.
 
 const DEFAULT_ENDPOINT =
   "https://starcharts-summon.jp5.workers.dev/api/join-group";
@@ -31,10 +35,16 @@ export interface JoinResult {
   name: string;
 }
 
-export async function joinGroupByCode(inviteCode: string): Promise<JoinResult> {
+export async function joinGroupByCode(
+  inviteCode: string,
+  refreshToken: string,
+): Promise<JoinResult> {
   const trimmed = inviteCode.trim().toUpperCase();
   if (!trimmed) {
     throw new JoinError("Enter an invite code.");
+  }
+  if (!refreshToken) {
+    throw new JoinError("You need to be signed in to join a group.");
   }
 
   const controller = new AbortController();
@@ -45,7 +55,7 @@ export async function joinGroupByCode(inviteCode: string): Promise<JoinResult> {
     response = await fetch(JOIN_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ inviteCode: trimmed }),
+      body: JSON.stringify({ inviteCode: trimmed, refreshToken }),
       signal: controller.signal,
     });
   } catch (err) {
@@ -57,6 +67,9 @@ export async function joinGroupByCode(inviteCode: string): Promise<JoinResult> {
     clearTimeout(timer);
   }
 
+  if (response.status === 401) {
+    throw new JoinError("Your session has expired — sign in again to join.");
+  }
   if (response.status === 404) {
     throw new JoinError("No group found with that code.");
   }

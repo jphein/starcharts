@@ -92,15 +92,17 @@ export default function GroupSetup() {
 
     setJoinState({ status: "submitting" });
     try {
-      // Resolve the invite code via the Worker. Lets the SPA's
-      // `groups.view` permission stay members-only — non-members
-      // don't need direct read access to `groups` to join.
-      const { groupId } = await joinGroupByCode(normalized);
-      // Link from the $users side so the permission check is
-      // $users.update ("auth.id == data.id") rather than
-      // groups.update ("auth.id in members") — the user isn't
-      // a member yet, so the groups.update rule always denies.
-      await db.transact(db.tx.$users[user.id].link({ groups: groupId }));
+      // The Worker owns the entire join flow: it verifies our
+      // refresh token, looks up the invite code with the admin
+      // token, and links us to the group server-side via admin
+      // transact. The link is no longer done from the client —
+      // `groups.update` is rename-only now, so a SPA-side write
+      // would be denied. Pulling the token via `db.getAuth()`
+      // (rather than threading it through state) keeps it out of
+      // any rendered surfaces.
+      const auth = await db.getAuth();
+      const refreshToken = auth?.refresh_token ?? "";
+      const { groupId } = await joinGroupByCode(normalized, refreshToken);
       setCurrentGroupId(groupId);
       navigate("/dashboard");
     } catch (err) {
