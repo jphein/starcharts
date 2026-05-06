@@ -15,6 +15,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  push-perms:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Push InstantDB permissions
+        working-directory: app
+        env:
+          INSTANT_TOKEN: ${{ secrets.INSTANT_TOKEN }}
+        run: |
+          if [ -z "$INSTANT_TOKEN" ]; then
+            echo "INSTANT_TOKEN secret not set — skipping perms push."
+            echo "Add INSTANT_TOKEN to Settings → Secrets and variables → Actions to enable automatic perms deployment."
+            exit 0
+          fi
+          npx instant-cli push perms -a e526d9cf-e783-4a99-b3b3-a69730ecdd7e -t "$INSTANT_TOKEN" --yes
+
   build:
     runs-on: ubuntu-latest
     steps:
