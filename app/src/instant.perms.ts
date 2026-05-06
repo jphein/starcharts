@@ -86,6 +86,18 @@
 //                longer needs a self-join clause and is back to
 //                "members can rename, nothing else."
 //
+//   2026-05-06 — opened charts.update for goalCount-only writes by group
+//                members (issue #44). Original chart contract was "everything
+//                immutable except completedAt" — practice showed groups want
+//                to retune the goal mid-chart when it turns out too easy or
+//                too ambitious. The new clause sits beside the completedAt
+//                clause inside one OR-grouped expression: a partial update
+//                of just `goalCount` passes when the chart hasn't completed
+//                yet and the new value is positive. The "must be ≥ current
+//                star total" guardrail is enforced UI-side because rules
+//                can't cheaply aggregate gift counts; rule-side stays at
+//                "positive integer, chart not completed."
+//
 //   2026-05-05 — opened gifts.update for x/y-only repositioning by group
 //                members (issue #25). Cluster drag re-anchors a gift on
 //                the chart sky; satellites recalculate deterministically
@@ -188,29 +200,36 @@ const rules = {
       // immediately after creation.
       create: "auth.id != null",
 
-      // Members can update — but only the `completedAt` field is
-      // mutable, and only as a one-way transition from null to a
-      // timestamp. The rest of a chart (name, goalCount, reward,
-      // createdAt) is set at creation and stays put.
+      // Members can update via two narrow paths:
+      //   1. completedAt-only: a one-way transition from null to a
+      //      timestamp. Fires when the goal is reached. Once stamped,
+      //      the chart is memory-mode and immutable — preventing
+      //      toggle-loops that would retrigger the celebrate scene.
+      //   2. goalCount-only: retune the goal mid-chart (issue #44).
+      //      Allowed only while the chart is incomplete; the new value
+      //      must be positive. The "≥ current star total" floor is
+      //      UI-enforced because rules can't cheaply aggregate gift
+      //      counts.
       //
-      // Three constraints:
-      //   1. `request.modifiedFields.all(field, field == 'completedAt')`
-      //      — only `completedAt` may appear in this update.
-      //   2. `data.completedAt == null` — the chart must currently
-      //      be incomplete. Once stamped, it can't be re-stamped or
-      //      cleared. This prevents toggle-loops that would retrigger
-      //      the celebrate scene + memory transition.
-      //   3. `newData.completedAt != null` — the new value must be
-      //      a real timestamp (no "uncomplete" via writing null).
-      //
-      // Per the design brief, completed charts become memories,
-      // not editable artifacts.
+      // Both paths use `request.modifiedFields.all(field, …)` so a
+      // partial update is field-pinned: only the listed field may
+      // appear in the update set. The OR-group sits inside the
+      // membership check so non-members can't take either path. Per
+      // the design brief, completed charts become memories, not
+      // editable artifacts — both clauses gate on `data.completedAt
+      // == null`.
       update:
         "auth.id != null && " +
         "auth.id in data.ref('group.members.id') && " +
-        "request.modifiedFields.all(field, field == 'completedAt') && " +
-        "data.completedAt == null && " +
-        "newData.completedAt != null",
+        "(" +
+        "  (request.modifiedFields.all(field, field == 'completedAt') && " +
+        "   data.completedAt == null && " +
+        "   newData.completedAt != null) " +
+        "  || " +
+        "  (request.modifiedFields.all(field, field == 'goalCount') && " +
+        "   data.completedAt == null && " +
+        "   newData.goalCount > 0)" +
+        ")",
 
       // Charts are not deletable in v1 — completed charts become
       // memories per the design brief.
