@@ -19,6 +19,8 @@ import { LoadingSky } from "../components/LoadingSky";
 import { Star } from "../components/Star";
 import { GiftCard } from "../components/GiftCard";
 import { PresencePanel } from "../components/PresencePanel";
+import { GoalCapsule } from "../components/GoalCapsule";
+import { SkyEditOverlay } from "../components/SkyEditOverlay";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useCurrentGroup } from "../hooks/useCurrentGroup";
 import { useChart } from "../hooks/useChart";
@@ -57,6 +59,7 @@ export default function ChartSky() {
   const { gifts, isLoading: giftsLoading } = useGiftsForChart(chartId);
 
   const [selectedGift, setSelectedGift] = useState<GiftWithLinks | null>(null);
+  const [editingGoal, setEditingGoal] = useState(false);
 
   // ── Panning + cluster drag ───────────────────────────────────────────────
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -357,6 +360,9 @@ export default function ChartSky() {
 
   function handlePointerDown(e: React.PointerEvent) {
     if (e.button !== 0) return;
+    // Don't fight the goal-edit input for pointer ownership — pan and
+    // cluster-drag are both suspended while the goal is being edited.
+    if (editingGoal) return;
     // Press on a cluster → candidate cluster-drag (don't pan the sky).
     // Press on empty sky → sky-pan (existing behaviour).
     const giftEl = (e.target as HTMLElement).closest("[data-gift-id]");
@@ -454,6 +460,11 @@ export default function ChartSky() {
     () => gifts.reduce((sum, g) => sum + g.count, 0),
     [gifts],
   );
+
+  const handleGoalCommit = async (newGoal: number) => {
+    if (!chart) return;
+    await db.transact(db.tx.charts[chart.id].update({ goalCount: newGoal }));
+  };
 
   // Render the empty sky while gating/loading so the page never flashes the
   // wrong content.
@@ -569,11 +580,13 @@ export default function ChartSky() {
 
         <div style={trailingStyle}>
           <PresencePanel chartId={chart.id} />
-          <div style={progressStyle} aria-label="Star progress">
-            <span style={progressNumStyle}>{totalCount}</span>
-            <span style={progressSepStyle}> / </span>
-            <span style={progressNumStyle}>{chart.goalCount}</span>
-          </div>
+          <GoalCapsule
+            totalCount={totalCount}
+            goalCount={chart.goalCount}
+            completed={chart.completedAt != null}
+            onCommit={handleGoalCommit}
+            onEditingChange={setEditingGoal}
+          />
         </div>
       </header>
 
@@ -598,6 +611,8 @@ export default function ChartSky() {
           />
         )}
       </AnimatePresence>
+
+      <SkyEditOverlay visible={editingGoal} />
     </div>
   );
 }
@@ -673,23 +688,6 @@ const trailingStyle: CSSProperties = {
   alignItems: "center",
   gap: 12,
   flexShrink: 0,
-};
-
-const progressStyle: CSSProperties = {
-  fontFamily: "var(--sc-sans)",
-  fontSize: 13,
-  letterSpacing: "0.04em",
-  color: "var(--sc-gold)",
-  flexShrink: 0,
-};
-
-const progressNumStyle: CSSProperties = {
-  fontVariantNumeric: "tabular-nums",
-};
-
-const progressSepStyle: CSSProperties = {
-  margin: "0 4px",
-  opacity: 0.6,
 };
 
 const fabStyle: CSSProperties = {

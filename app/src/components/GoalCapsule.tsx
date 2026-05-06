@@ -47,10 +47,9 @@ export function GoalCapsule({
     onEditingChange?.(editing);
   }, [editing, onEditingChange]);
 
-  // Reset the draft when goalCount changes externally (realtime echo).
-  useEffect(() => {
-    if (!editing) setDraft(String(goalCount));
-  }, [goalCount, editing]);
+  // No need to sync `draft` from `goalCount` outside of editing: the JSX
+  // renders `goalCount` directly when not editing, and `beginEdit` seeds
+  // `draft` fresh each time the user opens the input.
 
   const ratio = goalCount > 0 ? totalCount / goalCount : 0;
   const auraStrong = ratio >= 0.5;
