@@ -441,16 +441,6 @@ function secondsUntilNextUtcHour(now: Date): number {
   return Math.max(30, Math.ceil((next.getTime() - now.getTime()) / 1000));
 }
 
-// Lazily-initialized admin SDK client. Workers reuse module state
-// within an isolate, so this avoids re-init per request.
-let adminDbClient: ReturnType<typeof initAdminDb> | null = null;
-function getAdminDb(adminToken: string) {
-  if (!adminDbClient) {
-    adminDbClient = initAdminDb({ appId: INSTANT_APP_ID, adminToken });
-  }
-  return adminDbClient;
-}
-
 // POST /api/join-group { inviteCode, refreshToken } → { groupId, name }
 //
 // Owns the entire join flow server-side:
@@ -550,7 +540,15 @@ async function handleJoinGroup(
     });
   }
 
-  const db = getAdminDb(env.INSTANT_ADMIN_TOKEN);
+  // Construct a fresh admin client per request rather than caching at
+  // module scope. The admin SDK's `init` is constructor-only — it does
+  // no network — so the per-request cost is negligible, and not caching
+  // means a `wrangler secret put INSTANT_ADMIN_TOKEN` rotation takes
+  // effect on the next request without waiting for isolate recycle.
+  const db = initAdminDb({
+    appId: INSTANT_APP_ID,
+    adminToken: env.INSTANT_ADMIN_TOKEN,
+  });
 
   // Verify the user's refresh token. If the token is invalid the
   // admin SDK throws or returns a falsy user — either way we treat
