@@ -635,10 +635,12 @@ Current rule set:
 - **`groups`** — view: members only (closed via PR #14, once
   the Worker's `/api/join-group` endpoint replaced the SPA's
   direct invite-code lookup). Create: any authed user. Update:
-  two shapes — existing members may rename (`name` only,
-  `inviteCode` and `createdAt` immutable); a non-member may
-  self-join by linking themselves into `members` via the
-  invite-code flow. Delete: blocked.
+  rename-only — existing members may change `name`; everything
+  else (`inviteCode`, `createdAt`, the `members` link) is
+  immutable from the client. Membership writes go through the
+  Worker's `/api/join-group` endpoint, which verifies the caller's
+  refresh token and links them to the group via admin transact.
+  Delete: blocked.
 - **`charts`** — view: members of the chart's group. Create:
   any authed user (`auth.id != null`); membership can't be
   enforced at create time because `newData.ref()` doesn't

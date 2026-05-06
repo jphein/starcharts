@@ -72,6 +72,20 @@
 //                evaluate permission rule" — newData.ref() does not support
 //                link traversal in InstantDB's rule engine.
 //
+//   2026-05-06 — tightened groups.update back to rename-only (issue #42).
+//                The self-join clause shipped on 2026-05-05 was permissive
+//                in the worst case: a non-member writing raw HTTP could
+//                mutate the members link in any way (add a third party,
+//                unlink existing members) — modifiedFields-only checks
+//                can't constrain *which* row appears in the link target.
+//                Joins now go through the Worker's POST /api/join-group
+//                endpoint, which verifies the caller's refresh token with
+//                the admin SDK and links the verified user to the group
+//                via admin transact (bypassing perm rules). With the
+//                membership write fully admin-side, `groups.update` no
+//                longer needs a self-join clause and is back to
+//                "members can rename, nothing else."
+//
 //   2026-05-05 — opened gifts.update for x/y-only repositioning by group
 //                members (issue #25). Cluster drag re-anchors a gift on
 //                the chart sky; satellites recalculate deterministically
@@ -134,35 +148,21 @@ const rules = {
       // write proxy with admin auth would close this for real.
       create: "auth.id != null",
 
-      // Two permitted update shapes:
+      // Rename-only. Existing members can change `name`; everything
+      // else is immutable from the client. `inviteCode` and `createdAt`
+      // are set at creation and never change. The members link is
+      // admin-write-only: joins go through the Worker's
+      // /api/join-group endpoint, which verifies the caller's refresh
+      // token and performs the link via admin transact. No client-side
+      // path is permitted to mutate the members link.
       //
-      //   1. Rename — existing members can change the group name.
-      //      `inviteCode` and `createdAt` are immutable after creation.
-      //      Uses `modifiedFields` so a partial `{name:…}` update passes
-      //      without checking unchanged fields that would read as null.
-      //
-      //   2. Join — any authed user can modify the members link.
-      //      InstantDB checks groups.update on BOTH sides of a link op,
-      //      so `db.tx.$users[uid].link({ groups: gid })` triggers
-      //      groups.update with modifiedFields=['members']. We allow it
-      //      when the ONLY field being touched is 'members' — same
-      //      construct as the rename check, just a different label.
-      //
-      //      A previous version tried to narrow this to self-joins via:
-      //        !(auth.id in data.ref('members.id'))          — not yet a member
-      //        auth.id in newData.ref('members.id')          — will be a member
-      //      But `newData.ref()` only supports plain attribute access; it
-      //      does NOT traverse links, causing "Could not evaluate permission
-      //      rule" at runtime. The narrower guard is left out until
-      //      InstantDB adds newData link-ref support. Group IDs are
-      //      UUID4 and not publicly exposed, so the attack surface for
-      //      the broader rule is low in practice.
+      // Uses `modifiedFields.all(...)` so a partial `{name:…}` update
+      // passes without checking unchanged fields that would read as
+      // null with the simpler `newData.X == data.X` shape.
       update:
-        "auth.id != null && (" +
-        "(auth.id in data.ref('members.id') && request.modifiedFields.all(field, field == 'name'))" +
-        " || " +
-        "request.modifiedFields.all(field, field == 'members')" +
-        ")",
+        "auth.id != null && " +
+        "auth.id in data.ref('members.id') && " +
+        "request.modifiedFields.all(field, field == 'name')",
 
       // No client-side group deletion in v1.
       delete: "false",
