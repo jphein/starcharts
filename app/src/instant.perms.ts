@@ -67,11 +67,24 @@
 //                groups.update fires with modifiedFields = ['members'],
 //                which the old rule rejected (it only allowed 'name').
 //                Added a second clause to allow a non-member to add
-//                themselves: auth user is not yet a member, only the
-//                members link is being modified, and after the op the
-//                auth user appears in newData.ref('members.id') —
-//                confirming they are linking themselves, not adding or
-//                removing a third party.
+//                themselves: auth user is not yet a member and only the
+//                members link is being modified.
+//
+//   2026-05-05 — removed `auth.id in newData.ref('members.id')` guard
+//                from the self-join clause (issue #38). InstantDB's rule
+//                evaluator only supports plain attribute access on
+//                `newData` (e.g. `newData.completedAt`); link traversal
+//                via `newData.ref(...)` is not implemented, and the rule
+//                crashed with "Could not evaluate permission rule for
+//                'groups.update'" on every join attempt. The self-join
+//                clause now uses only the `.all()` quantifier pattern
+//                proven to work in the rename clause — `field == 'members'`
+//                instead of `field == 'name'`. Loss of the third guard
+//                is tolerable: `db.tx.$users[uid].link({ groups: gid })`
+//                from the SPA can only link the calling auth user, so a
+//                non-member touching the members link in practice can
+//                only add themselves; cross-user link manipulation isn't
+//                reachable from the client SDK.
 //
 //   2026-05-05 — opened gifts.update for x/y-only repositioning by group
 //                members (issue #25). Cluster drag re-anchors a gift on
@@ -147,19 +160,22 @@ const rules = {
       //      BOTH sides of a link operation, so even when the SPA writes
       //      `db.tx.$users[uid].link({ groups: gid })` (from the $users
       //      side), groups.update still fires with modifiedFields=['members'].
-      //      Three guards keep this narrow:
+      //      Two guards keep this narrow:
       //        a) !(auth.id in data.ref('members.id')) — caller is not yet
       //           a member, so this path is unreachable by existing members.
       //        b) request.modifiedFields.all(field, field == 'members') —
       //           only the members link is touched; no attribute changes.
-      //        c) auth.id in newData.ref('members.id') — after the op the
-      //           caller is in the members list, confirming they are adding
-      //           themselves (not someone else, and not removing anyone).
+      //      A third guard (`auth.id in newData.ref('members.id')`) was
+      //      tried but crashes the evaluator — `newData.ref(...)` isn't
+      //      supported, only plain attribute access on newData is. The
+      //      SDK only links the calling auth user from the $users side,
+      //      so non-members modifying the members link in practice can
+      //      only add themselves anyway.
       update:
         "auth.id != null && (" +
         "(auth.id in data.ref('members.id') && request.modifiedFields.all(field, field == 'name'))" +
         " || " +
-        "(!(auth.id in data.ref('members.id')) && request.modifiedFields.all(field, field == 'members') && auth.id in newData.ref('members.id'))" +
+        "(!(auth.id in data.ref('members.id')) && request.modifiedFields.all(field, field == 'members'))" +
         ")",
 
       // No client-side group deletion in v1.
