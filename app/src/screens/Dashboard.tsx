@@ -8,6 +8,7 @@ import { ErrorScroll } from "../components/ErrorScroll";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useCurrentGroup } from "../hooks/useCurrentGroup";
 import { useChartsForGroup } from "../hooks/useChartsForGroup";
+import { useUserGroups } from "../hooks/useUserGroups";
 import { signOut } from "../lib/auth";
 import { db } from "../db/client";
 
@@ -59,6 +60,66 @@ const signOutBtn: CSSProperties = {
   transition: "color 150ms ease",
 };
 
+const switcherChevronStyle: CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: "0 2px",
+  color: "var(--sc-gold)",
+  fontSize: 9,
+  cursor: "pointer",
+  lineHeight: 1,
+};
+
+const switcherDropdownStyle: CSSProperties = {
+  position: "absolute",
+  top: "calc(100% + 8px)",
+  left: 0,
+  zIndex: 50,
+  minWidth: 220,
+  background: "var(--sc-bg, #0d0a14)",
+  border: "1px solid var(--sc-stroke)",
+  borderRadius: 12,
+  boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+  backdropFilter: "blur(20px)",
+  WebkitBackdropFilter: "blur(20px)",
+  display: "flex",
+  flexDirection: "column",
+  overflow: "hidden",
+};
+
+const switcherRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "12px 16px",
+  background: "none",
+  border: "none",
+  color: "var(--sc-fg)",
+  fontFamily: "var(--sc-sans)",
+  fontSize: 14,
+  cursor: "pointer",
+  width: "100%",
+};
+
+const switcherDividerStyle: CSSProperties = {
+  height: 1,
+  background: "var(--sc-stroke)",
+  margin: "4px 0",
+};
+
+const switcherActionStyle: CSSProperties = {
+  display: "block",
+  padding: "10px 16px",
+  background: "none",
+  border: "none",
+  color: "var(--sc-fg-muted)",
+  fontFamily: "var(--sc-sans)",
+  fontSize: 13,
+  cursor: "pointer",
+  textAlign: "left",
+  width: "100%",
+};
+
 const createTileStyle: CSSProperties = {
   minHeight: 180,
   borderRadius: 18,
@@ -79,8 +140,9 @@ const createTileStyle: CSSProperties = {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, isLoading: userLoading } = useCurrentUser();
-  const { group, members, isLoading: groupLoading } = useCurrentGroup();
+  const { group, members, isLoading: groupLoading, setCurrentGroupId } = useCurrentGroup();
   const { charts, isLoading: chartsLoading } = useChartsForGroup(group?.id);
+  const { groups: userGroups, isLoading: groupsLoading } = useUserGroups(user?.id);
 
   const [copied, setCopied] = useState(false);
   const [createHover, setCreateHover] = useState(false);
@@ -89,6 +151,7 @@ export default function Dashboard() {
   const nameInputRef = useRef<HTMLInputElement>(null);
   // Surfaced if the group-rename transact fails (perms, network).
   const [renameError, setRenameError] = useState<string | null>(null);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
 
   // Auth gate: not loading, no user → sign in.
   useEffect(() => {
@@ -104,12 +167,18 @@ export default function Dashboard() {
     }
   }, [userLoading, user, navigate]);
 
-  // Group gate: signed in but no current group → group setup.
+  // Group gate: signed in but no current group selected.
+  // Auto-select the first available group on a fresh device; only send to
+  // /group-setup when the user truly belongs to no groups.
   useEffect(() => {
-    if (!userLoading && user && user.displayName.trim() && !groupLoading && !group) {
-      navigate("/group-setup", { replace: true });
+    if (!userLoading && user && user.displayName.trim() && !groupLoading && !group && !groupsLoading) {
+      if (userGroups.length > 0) {
+        setCurrentGroupId(userGroups[0].id);
+      } else {
+        navigate("/group-setup", { replace: true });
+      }
     }
-  }, [userLoading, user, groupLoading, group, navigate]);
+  }, [userLoading, user, groupLoading, group, groupsLoading, userGroups, setCurrentGroupId, navigate]);
 
   // While redirecting or loading, render the empty sky with a soft hint
   // (delayed so a fast load is just a flash, not a flicker of text).
@@ -183,8 +252,20 @@ export default function Dashboard() {
         }}
       >
         <header style={headerStyle}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ ...eyebrowStyle, color: "var(--sc-gold)" }}>your group</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, position: "relative" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ ...eyebrowStyle, color: "var(--sc-gold)" }}>your group</span>
+              {userGroups.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setSwitcherOpen((o) => !o)}
+                  style={switcherChevronStyle}
+                  aria-label="Switch group"
+                >
+                  {switcherOpen ? "▲" : "▼"}
+                </button>
+              )}
+            </div>
             {editingName ? (
               <input
                 ref={nameInputRef}
@@ -229,6 +310,43 @@ export default function Dashboard() {
               >
                 {group.name}
               </h1>
+            )}
+
+            {switcherOpen && (
+              <>
+                <div
+                  style={{ position: "fixed", inset: 0, zIndex: 49 }}
+                  onClick={() => setSwitcherOpen(false)}
+                />
+                <div style={switcherDropdownStyle}>
+                  {userGroups.map((g) => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => { setCurrentGroupId(g.id); setSwitcherOpen(false); }}
+                      style={{ ...switcherRowStyle, fontWeight: g.id === group.id ? 600 : 400 }}
+                    >
+                      <span style={{ flex: 1, textAlign: "left" }}>{g.name}</span>
+                      {g.id === group.id && <span style={{ color: "var(--sc-gold)", fontSize: 12 }}>✓</span>}
+                    </button>
+                  ))}
+                  <div style={switcherDividerStyle} />
+                  <button
+                    type="button"
+                    onClick={() => { setSwitcherOpen(false); navigate("/group-setup?tab=join"); }}
+                    style={switcherActionStyle}
+                  >
+                    + Join another group
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setSwitcherOpen(false); navigate("/group-setup?tab=create"); }}
+                    style={switcherActionStyle}
+                  >
+                    + Create new group
+                  </button>
+                </div>
+              </>
             )}
           </div>
 
