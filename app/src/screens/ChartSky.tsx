@@ -19,6 +19,8 @@ import { LoadingSky } from "../components/LoadingSky";
 import { Star } from "../components/Star";
 import { GiftCard } from "../components/GiftCard";
 import { PresencePanel } from "../components/PresencePanel";
+import { GoalCapsule } from "../components/GoalCapsule";
+import { SkyEditOverlay } from "../components/SkyEditOverlay";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useCurrentGroup } from "../hooks/useCurrentGroup";
 import { useChart } from "../hooks/useChart";
@@ -68,42 +70,15 @@ export default function ChartSky() {
   const [selectedGift, setSelectedGift] = useState<GiftWithLinks | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editingGoal, setEditingGoal] = useState(false);
-  const [goalInput, setGoalInput] = useState("");
-  const goalInputRef = useRef<HTMLInputElement>(null);
 
-  function handleGoalOpen() {
-    if (!chart || chart.completedAt != null) return;
-    setGoalInput(String(chart.goalCount));
-    setEditingGoal(true);
-    setTimeout(() => {
-      goalInputRef.current?.select();
-    }, 0);
-  }
-
-  function handleGoalSave() {
-    if (!chart || !chartId) return;
-    const parsed = parseInt(goalInput, 10);
-    if (isNaN(parsed) || parsed < 1) {
-      setEditingGoal(false);
-      return;
-    }
-    if (parsed <= totalCount) {
-      setEditingGoal(false);
-      return;
-    }
-    if (parsed === chart.goalCount) {
-      setEditingGoal(false);
-      return;
-    }
-    setEditingGoal(false);
-    db.transact(db.tx.charts[chartId].update({ goalCount: parsed })).catch(
-      (err) => console.warn("[chart-sky] goal update failed", err),
-    );
-  }
-
-  function handleGoalKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") handleGoalSave();
-    if (e.key === "Escape") setEditingGoal(false);
+  // Async commit handler for GoalCapsule. Validation (positive integer,
+  // not below current totalCount) lives inside GoalCapsule; we just wrap
+  // the transact and let any rejection bubble up so the capsule can
+  // surface it. The realtime echo of `chart.goalCount` keeps the visible
+  // value in sync once the write lands.
+  async function handleGoalCommit(newGoal: number): Promise<void> {
+    if (!chartId) return;
+    await db.transact(db.tx.charts[chartId].update({ goalCount: newGoal }));
   }
 
   // ── Panning + cluster drag ───────────────────────────────────────────────
@@ -621,33 +596,13 @@ export default function ChartSky() {
 
         <div style={trailingStyle}>
           <PresencePanel chartId={chart.id} />
-          <div style={progressStyle} aria-label="Star progress">
-            <span style={progressNumStyle}>{totalCount}</span>
-            <span style={progressSepStyle}> / </span>
-            {editingGoal ? (
-              <input
-                ref={goalInputRef}
-                type="number"
-                min={totalCount + 1}
-                value={goalInput}
-                onChange={(e) => setGoalInput(e.target.value)}
-                onBlur={handleGoalSave}
-                onKeyDown={handleGoalKeyDown}
-                style={goalInputStyle}
-                aria-label="Edit goal count"
-              />
-            ) : (
-              <button
-                type="button"
-                onClick={handleGoalOpen}
-                style={goalButtonStyle}
-                title={chart.completedAt != null ? undefined : "Tap to edit goal"}
-                disabled={chart.completedAt != null}
-              >
-                {chart.goalCount}
-              </button>
-            )}
-          </div>
+          <GoalCapsule
+            totalCount={totalCount}
+            goalCount={chart.goalCount}
+            completed={chart.completedAt != null}
+            onCommit={handleGoalCommit}
+            onEditingChange={setEditingGoal}
+          />
         </div>
 
         {chart.completedAt == null && (
@@ -709,6 +664,8 @@ export default function ChartSky() {
           />
         )}
       </AnimatePresence>
+
+      <SkyEditOverlay visible={editingGoal} />
     </div>
   );
 }
@@ -786,23 +743,6 @@ const trailingStyle: CSSProperties = {
   flexShrink: 0,
 };
 
-const progressStyle: CSSProperties = {
-  fontFamily: "var(--sc-sans)",
-  fontSize: 13,
-  letterSpacing: "0.04em",
-  color: "var(--sc-gold)",
-  flexShrink: 0,
-};
-
-const progressNumStyle: CSSProperties = {
-  fontVariantNumeric: "tabular-nums",
-};
-
-const progressSepStyle: CSSProperties = {
-  margin: "0 4px",
-  opacity: 0.6,
-};
-
 const confirmOverlayStyle: CSSProperties = {
   position: "absolute",
   top: 0,
@@ -848,37 +788,6 @@ const confirmDeleteStyle: CSSProperties = {
   fontSize: 13,
   fontWeight: 500,
   cursor: "pointer",
-};
-
-const goalButtonStyle: CSSProperties = {
-  background: "none",
-  border: "none",
-  padding: 0,
-  fontFamily: "var(--sc-sans)",
-  fontSize: 13,
-  fontVariantNumeric: "tabular-nums",
-  letterSpacing: "0.04em",
-  color: "var(--sc-gold)",
-  cursor: "pointer",
-  textDecoration: "underline dotted",
-  textUnderlineOffset: 3,
-};
-
-const goalInputStyle: CSSProperties = {
-  width: "4ch",
-  background: "none",
-  border: "none",
-  borderBottom: "1px solid var(--sc-gold)",
-  outline: "none",
-  padding: 0,
-  fontFamily: "var(--sc-sans)",
-  fontSize: 13,
-  fontVariantNumeric: "tabular-nums",
-  letterSpacing: "0.04em",
-  color: "var(--sc-gold)",
-  textAlign: "center",
-  // Hide the browser's number spinners
-  MozAppearance: "textfield" as CSSProperties["MozAppearance"],
 };
 
 const fabStyle: CSSProperties = {
