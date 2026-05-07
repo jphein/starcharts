@@ -648,18 +648,19 @@ export default function ChartSky() {
               </button>
             )}
           </div>
-          {chart.completedAt == null && (
-            <button
-              type="button"
-              onClick={() => setConfirmDelete(true)}
-              style={iconButtonStyle}
-              aria-label="Delete chart"
-              title="Delete chart"
-            >
-              🗑
-            </button>
-          )}
         </div>
+
+        {chart.completedAt == null && (
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            style={iconButtonStyle}
+            aria-label="Delete chart"
+            title="Delete chart"
+          >
+            🗑
+          </button>
+        )}
       </header>
 
       {confirmDelete && (
