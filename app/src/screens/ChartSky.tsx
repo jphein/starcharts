@@ -56,6 +56,15 @@ export default function ChartSky() {
   const { chart, isLoading: chartLoading } = useChart(chartId);
   const { gifts, isLoading: giftsLoading } = useGiftsForChart(chartId);
 
+  // Freeze the set of gift IDs that are present on initial load so we can
+  // mark any gifts that arrive later as `isNew` for the dramatic pop entrance.
+  const initialGiftIds = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!giftsLoading && initialGiftIds.current === null) {
+      initialGiftIds.current = new Set(gifts.map((g) => g.id));
+    }
+  }, [giftsLoading, gifts]);
+
   const [selectedGift, setSelectedGift] = useState<GiftWithLinks | null>(null);
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState("");
@@ -581,6 +590,10 @@ export default function ChartSky() {
                         onClick={() => setSelectedGift(gift)}
                         alt={altBase}
                         delay={(idx % 5) * 0.4}
+                        isNew={
+                          initialGiftIds.current != null &&
+                          !initialGiftIds.current.has(gift.id)
+                        }
                       />
                     ))}
                   </div>
