@@ -57,6 +57,44 @@ export default function ChartSky() {
   const { gifts, isLoading: giftsLoading } = useGiftsForChart(chartId);
 
   const [selectedGift, setSelectedGift] = useState<GiftWithLinks | null>(null);
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalInput, setGoalInput] = useState("");
+  const goalInputRef = useRef<HTMLInputElement>(null);
+
+  function handleGoalOpen() {
+    if (!chart || chart.completedAt != null) return;
+    setGoalInput(String(chart.goalCount));
+    setEditingGoal(true);
+    setTimeout(() => {
+      goalInputRef.current?.select();
+    }, 0);
+  }
+
+  function handleGoalSave() {
+    if (!chart || !chartId) return;
+    const parsed = parseInt(goalInput, 10);
+    if (isNaN(parsed) || parsed < 1) {
+      setEditingGoal(false);
+      return;
+    }
+    if (parsed <= totalCount) {
+      setEditingGoal(false);
+      return;
+    }
+    if (parsed === chart.goalCount) {
+      setEditingGoal(false);
+      return;
+    }
+    setEditingGoal(false);
+    db.transact(db.tx.charts[chartId].update({ goalCount: parsed })).catch(
+      (err) => console.warn("[chart-sky] goal update failed", err),
+    );
+  }
+
+  function handleGoalKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") handleGoalSave();
+    if (e.key === "Escape") setEditingGoal(false);
+  }
 
   // ── Panning + cluster drag ───────────────────────────────────────────────
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -572,7 +610,29 @@ export default function ChartSky() {
           <div style={progressStyle} aria-label="Star progress">
             <span style={progressNumStyle}>{totalCount}</span>
             <span style={progressSepStyle}> / </span>
-            <span style={progressNumStyle}>{chart.goalCount}</span>
+            {editingGoal ? (
+              <input
+                ref={goalInputRef}
+                type="number"
+                min={totalCount + 1}
+                value={goalInput}
+                onChange={(e) => setGoalInput(e.target.value)}
+                onBlur={handleGoalSave}
+                onKeyDown={handleGoalKeyDown}
+                style={goalInputStyle}
+                aria-label="Edit goal count"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={handleGoalOpen}
+                style={goalButtonStyle}
+                title={chart.completedAt != null ? undefined : "Tap to edit goal"}
+                disabled={chart.completedAt != null}
+              >
+                {chart.goalCount}
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -690,6 +750,37 @@ const progressNumStyle: CSSProperties = {
 const progressSepStyle: CSSProperties = {
   margin: "0 4px",
   opacity: 0.6,
+};
+
+const goalButtonStyle: CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: 0,
+  fontFamily: "var(--sc-sans)",
+  fontSize: 13,
+  fontVariantNumeric: "tabular-nums",
+  letterSpacing: "0.04em",
+  color: "var(--sc-gold)",
+  cursor: "pointer",
+  textDecoration: "underline dotted",
+  textUnderlineOffset: 3,
+};
+
+const goalInputStyle: CSSProperties = {
+  width: "4ch",
+  background: "none",
+  border: "none",
+  borderBottom: "1px solid var(--sc-gold)",
+  outline: "none",
+  padding: 0,
+  fontFamily: "var(--sc-sans)",
+  fontSize: 13,
+  fontVariantNumeric: "tabular-nums",
+  letterSpacing: "0.04em",
+  color: "var(--sc-gold)",
+  textAlign: "center",
+  // Hide the browser's number spinners
+  MozAppearance: "textfield" as CSSProperties["MozAppearance"],
 };
 
 const fabStyle: CSSProperties = {
