@@ -4,6 +4,7 @@ import { Sky } from "../components/Sky";
 import { LoadingSky } from "../components/LoadingSky";
 import { ChartCard } from "../components/ChartCard";
 import { MemberDots } from "../components/MemberDots";
+import { ErrorScroll } from "../components/ErrorScroll";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useCurrentGroup } from "../hooks/useCurrentGroup";
 import { useChartsForGroup } from "../hooks/useChartsForGroup";
@@ -86,6 +87,8 @@ export default function Dashboard() {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const nameInputRef = useRef<HTMLInputElement>(null);
+  // Surfaced if the group-rename transact fails (perms, network).
+  const [renameError, setRenameError] = useState<string | null>(null);
 
   // Auth gate: not loading, no user → sign in.
   useEffect(() => {
@@ -140,7 +143,18 @@ export default function Dashboard() {
     const trimmed = nameInput.trim();
     setEditingName(false);
     if (trimmed && trimmed !== group.name) {
-      await db.transact(db.tx.groups[group.id].update({ name: trimmed }));
+      try {
+        await db.transact(db.tx.groups[group.id].update({ name: trimmed }));
+        setRenameError(null);
+      } catch (err) {
+        // Perms can reject this (only owner can rename per perms hardening
+        // in commit 30014a8). Surface it instead of swallowing the rejection.
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : "Couldn't rename your group — please try again.";
+        setRenameError(message);
+      }
     }
   };
 
@@ -243,6 +257,13 @@ export default function Dashboard() {
             gap: 16,
           }}
         >
+          <ErrorScroll
+            show={!!renameError}
+            message={renameError ?? ""}
+            tone="warning"
+            onDismiss={() => setRenameError(null)}
+            align="left"
+          />
           {!chartsLoading && charts.length === 0 ? (
             <div
               style={{

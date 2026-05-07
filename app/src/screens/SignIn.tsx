@@ -19,6 +19,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { Sky } from "../components/Sky";
 import { LoadingSky } from "../components/LoadingSky";
+import { ErrorScroll } from "../components/ErrorScroll";
 import { requestMagicCode, signInWithCode } from "../lib/auth";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 
@@ -185,7 +186,12 @@ export default function SignIn() {
                 placeholder="you@somewhere.sky"
                 style={inputStyle}
               />
-              {errorMessage && <p style={errorStyle}>{errorMessage}</p>}
+              <ErrorScroll
+                show={!!errorMessage}
+                message={errorMessage ?? ""}
+                tone="warning"
+                style={{ marginTop: 4 }}
+              />
               <button
                 type="submit"
                 disabled={submitting}
@@ -223,7 +229,12 @@ export default function SignIn() {
                   fontVariantNumeric: "tabular-nums",
                 }}
               />
-              {errorMessage && <p style={errorStyle}>{errorMessage}</p>}
+              <ErrorScroll
+                show={!!errorMessage}
+                message={errorMessage ?? ""}
+                tone="warning"
+                style={{ marginTop: 4 }}
+              />
               <button
                 type="submit"
                 disabled={submitting}
@@ -359,11 +370,4 @@ const linkButtonStyle: React.CSSProperties = {
   textAlign: "center",
 };
 
-const errorStyle: React.CSSProperties = {
-  margin: 0,
-  marginTop: "-0.2rem",
-  fontFamily: "var(--sc-serif)",
-  fontStyle: "italic",
-  color: "var(--sc-fg-muted)",
-  fontSize: "0.85rem",
-};
+// Per-screen errorStyle removed — see app/src/components/ErrorScroll.tsx.

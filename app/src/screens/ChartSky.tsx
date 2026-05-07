@@ -21,6 +21,7 @@ import { GiftCard } from "../components/GiftCard";
 import { PresencePanel } from "../components/PresencePanel";
 import { GoalCapsule } from "../components/GoalCapsule";
 import { SkyEditOverlay } from "../components/SkyEditOverlay";
+import { ErrorScroll } from "../components/ErrorScroll";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useCurrentGroup } from "../hooks/useCurrentGroup";
 import { useChart } from "../hooks/useChart";
@@ -70,6 +71,9 @@ export default function ChartSky() {
   const [selectedGift, setSelectedGift] = useState<GiftWithLinks | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editingGoal, setEditingGoal] = useState(false);
+  // Surfaced near the top of the screen for chart-scope failures (e.g.
+  // delete rejected by perms). Auto-dismissable.
+  const [chartError, setChartError] = useState<string | null>(null);
 
   // Async commit handler for GoalCapsule. Validation (positive integer,
   // not below current totalCount) lives inside GoalCapsule; we just wrap
@@ -618,6 +622,23 @@ export default function ChartSky() {
         )}
       </header>
 
+      {/*
+        Floating error banner for chart-scope failures (delete rejected,
+        etc.). Goal-edit errors live inside GoalCapsule. Anchored under the
+        top bar so it doesn't fight the canvas. Auto-positioned so it
+        doesn't push layout.
+      */}
+      <div style={errorOverlayStyle}>
+        <ErrorScroll
+          show={!!chartError}
+          message={chartError ?? ""}
+          tone="warning"
+          onDismiss={() => setChartError(null)}
+          align="left"
+          style={{ pointerEvents: "auto" }}
+        />
+      </div>
+
       {confirmDelete && (
         <div style={confirmOverlayStyle}>
           <span style={confirmTextStyle}>Delete this chart?</span>
@@ -632,9 +653,14 @@ export default function ChartSky() {
             type="button"
             onClick={() => {
               setConfirmDelete(false);
-              db.transact(db.tx.charts[chartId!].delete()).catch((err) =>
-                console.warn("[chart-sky] delete failed", err),
-              );
+              db.transact(db.tx.charts[chartId!].delete()).catch((err) => {
+                console.warn("[chart-sky] delete failed", err);
+                const message =
+                  err instanceof Error && err.message
+                    ? err.message
+                    : "Couldn't delete this chart — please try again.";
+                setChartError(message);
+              });
             }}
             style={confirmDeleteStyle}
           >
@@ -701,6 +727,21 @@ const topBarStyle: CSSProperties = {
   WebkitBackdropFilter: "blur(20px) saturate(160%)",
   borderBottom: "1px solid var(--sc-stroke)",
   zIndex: 10,
+};
+
+// Floating banner stack for chart-scope errors (delete failed, goal save
+// failed/invalid). Sits just below the top bar, above the canvas; doesn't
+// affect layout because parent is `overflow: hidden` and we're absolute.
+const errorOverlayStyle: CSSProperties = {
+  position: "absolute",
+  top: 76, // just below top bar (~64px) with a small gap
+  left: 16,
+  right: 16,
+  zIndex: 15,
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+  pointerEvents: "none", // children re-enable for the dismiss button
 };
 
 const iconButtonStyle: CSSProperties = {
