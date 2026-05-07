@@ -1,18 +1,21 @@
 // Starcharts Worker.
 //
-// POST /api/summon       { prompt, groupId }   → { url }
-// POST /api/join-group   { inviteCode }        → { groupId, name }
-// GET  /r2/<key>                               → image bytes
+// POST /api/summon       { prompt, groupId }                → { url }
+// POST /api/join-group   { inviteCode, refreshToken }       → { groupId, name }
+// GET  /r2/<key>                                            → image bytes
 //
 // Endpoints:
 //   - /api/summon: proxies a user prompt to Azure AI Foundry
 //     gpt-image-1.5, stores the resulting PNG in R2, returns a URL.
 //     Rate-limited per-group/day and per-IP/hour via KV.
-//   - /api/join-group: looks up an invite code in InstantDB using
-//     the admin token, returns just the group id + name. Lets the
-//     SPA join a group without needing `groups.view` to be
-//     globally readable. Rate-limited per-IP/hour with a separate
-//     bucket so brute-force inviteCode guessing is impractical.
+//   - /api/join-group: verifies the caller's InstantDB refresh
+//     token, looks up the invite code with the admin token, and
+//     links the verified user to the group server-side via admin
+//     transact. The membership write happens here (not from the
+//     SPA) so `groups.update` can stay locked to rename-only —
+//     no client-side path can mutate the members link. Rate-limited
+//     per-IP/hour with a bucket separate from /api/summon so
+//     brute-force inviteCode guessing is impractical.
 //   - /r2: fallback delivery for R2 PNGs when PUBLIC_BUCKET_URL
 //     isn't set.
 //
@@ -29,6 +32,8 @@
 //   - AZURE_OPENAI_API_VERSION e.g. 2025-04-01-preview
 //   - INSTANT_ADMIN_TOKEN      InstantDB admin token (for /api/join-group)
 //   - PUBLIC_BUCKET_URL        optional public R2 prefix
+
+import { init as initAdminDb } from "@instantdb/admin";
 
 export interface Env {
   BUCKET: R2Bucket;
@@ -436,21 +441,25 @@ function secondsUntilNextUtcHour(now: Date): number {
   return Math.max(30, Math.ceil((next.getTime() - now.getTime()) / 1000));
 }
 
-// POST /api/join-group { inviteCode } → { groupId, name }
+// POST /api/join-group { inviteCode, refreshToken } → { groupId, name }
 //
-// Looks up an invite code in InstantDB using the admin token, so
-// the SPA can resolve a code to a group id without needing
-// `groups.view` to be open to all authed users. With this endpoint
-// in place, `groups.view` can be locked to members and the only
-// way to discover a group's id from outside is via the admin path
-// here, which is rate-limited per IP to make brute-force guessing
-// of the 6-char invite code (32⁶ ≈ 1B) impractical.
+// Owns the entire join flow server-side:
+//   1. Verifies the caller's refresh token via InstantDB admin auth
+//      → confirms which user is making the request (cannot be spoofed
+//      from the client because the user can only present their own
+//      token).
+//   2. Looks up the group by invite code with the admin token.
+//   3. Links `$users[verifiedUserId] ↔ groups[groupId]` via admin
+//      transact, bypassing the perm rules.
 //
-// The endpoint is intentionally narrow: it returns *only* the
-// group id and name. The inviteCode itself is not echoed back. The
-// SPA uses the returned id to perform `groups[id].link({members:
-// authUserId})` from the user's own auth context — which still
-// passes the InstantDB perm rule for membership joining.
+// This shape is what lets `groups.update` stay rename-only:
+// non-members never need to mutate the members link from the client,
+// because the Worker does it with admin authority on their behalf.
+// Rate-limited per IP to keep brute-force guessing of the 6-char
+// invite code (32⁶ ≈ 1B) impractical.
+//
+// The response is intentionally narrow: only the group id and name.
+// The inviteCode is not echoed back.
 async function handleJoinGroup(
   request: Request,
   env: Env,
@@ -470,19 +479,27 @@ async function handleJoinGroup(
     return json({ error: "invalid JSON body" }, 400);
   }
 
-  const raw =
+  const inviteCodeRaw =
     body && typeof body === "object" && "inviteCode" in body
       ? (body as { inviteCode: unknown }).inviteCode
       : undefined;
-  if (typeof raw !== "string") {
+  if (typeof inviteCodeRaw !== "string") {
     return json({ error: "inviteCode is required" }, 400);
   }
-  const inviteCode = raw.trim().toUpperCase();
+  const inviteCode = inviteCodeRaw.trim().toUpperCase();
   if (!INVITE_CODE_RE.test(inviteCode)) {
     return json({ error: "inviteCode must be 6 characters from A–Z, 2–9" }, 400);
   }
 
-  // Per-IP rate limit on lookup attempts. Skipped silently if KV
+  const refreshTokenRaw =
+    body && typeof body === "object" && "refreshToken" in body
+      ? (body as { refreshToken: unknown }).refreshToken
+      : undefined;
+  if (typeof refreshTokenRaw !== "string" || refreshTokenRaw.length === 0) {
+    return json({ error: "refreshToken is required" }, 400);
+  }
+
+  // Per-IP rate limit on join attempts. Skipped silently if KV
   // isn't provisioned (matches the rest of the Worker's defensive
   // style).
   //
@@ -514,80 +531,83 @@ async function handleJoinGroup(
         { status: 429, headers },
       );
     }
-    // Bump only when the request is going through. Failed lookups
-    // (404s after this point) still count against the cap because
-    // they got past this gate — a probe loop pays for every attempt
-    // that doesn't hit the cap.
+    // Bump only when the request is going through. Failed lookups,
+    // unauthorized tokens, and link errors after this point still
+    // count against the cap — a probe loop pays for every attempt
+    // that gets past this gate.
     await env.RATE_LIMIT_KV.put(key, String(current + 1), {
       expirationTtl: SECONDS_IN_HOUR + 300,
     });
   }
 
-  // Admin query against InstantDB. The endpoint accepts InstaQL
-  // and bypasses perm rules using the admin token — so we get a
-  // result even when the caller has no auth context yet. We pull
-  // just `name` (along with the implicit `id`) to keep the
-  // response minimal.
-  let upstream: Response;
+  // Construct a fresh admin client per request rather than caching at
+  // module scope. The admin SDK's `init` is constructor-only — it does
+  // no network — so the per-request cost is negligible, and not caching
+  // means a `wrangler secret put INSTANT_ADMIN_TOKEN` rotation takes
+  // effect on the next request without waiting for isolate recycle.
+  const db = initAdminDb({
+    appId: INSTANT_APP_ID,
+    adminToken: env.INSTANT_ADMIN_TOKEN,
+  });
+
+  // Verify the user's refresh token. If the token is invalid the
+  // admin SDK throws or returns a falsy user — either way we treat
+  // it as 401. We deliberately don't echo *which* part failed in
+  // the response (just "invalid auth token") to avoid helping an
+  // attacker distinguish "valid token, wrong code" from "wrong
+  // token altogether".
+  let userId: string;
   try {
-    upstream = await fetch(
-      `https://api.instantdb.com/admin/query?app_id=${INSTANT_APP_ID}`,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "app-id": INSTANT_APP_ID,
-          authorization: `Bearer ${env.INSTANT_ADMIN_TOKEN}`,
-        },
-        body: JSON.stringify({
-          query: {
-            groups: {
-              $: { where: { inviteCode }, fields: ["name"] },
-            },
-          },
-        }),
-      },
-    );
+    const user = await db.auth.verifyToken(refreshTokenRaw);
+    if (!user || typeof user.id !== "string") {
+      return json({ error: "invalid auth token" }, 401);
+    }
+    userId = user.id;
   } catch (err) {
-    // Log internally; the public response stays generic so we
-    // don't leak admin-API error shape to anonymous callers
-    // probing the endpoint.
-    console.error("join-group: admin fetch threw", err);
-    return json({ error: "couldn't reach the directory" }, 502);
+    console.warn("join-group: verifyToken threw", err);
+    return json({ error: "invalid auth token" }, 401);
   }
 
-  if (!upstream.ok) {
-    const detail = await safeText(upstream);
-    console.error(
-      `join-group: admin returned ${upstream.status}`,
-      detail.slice(0, 500),
-    );
+  // Look up the group by invite code. The admin client query
+  // bypasses perm rules so we get a result even though the caller
+  // isn't a member yet.
+  let groupId: string;
+  let groupName: string;
+  try {
+    const result = (await db.query({
+      groups: { $: { where: { inviteCode }, fields: ["name"] } },
+    })) as { groups?: Array<{ id?: unknown; name?: unknown }> };
+    const groups = result.groups ?? [];
+    if (groups.length === 0) {
+      return json({ error: "no group with that invite code" }, 404);
+    }
+    const first = groups[0];
+    if (typeof first.id !== "string") {
+      return json({ error: "directory returned a malformed row" }, 502);
+    }
+    groupId = first.id;
+    groupName = typeof first.name === "string" ? first.name : "";
+  } catch (err) {
+    console.error("join-group: lookup failed", err);
     return json({ error: "directory lookup failed" }, 502);
   }
 
-  let payload: unknown;
+  // Link the verified user to the group with admin authority. This
+  // is what `groups.update` no longer permits from the client side
+  // — the rule is rename-only now, and any membership write must
+  // come through this code path.
+  //
+  // InstantDB link ops are idempotent: re-linking an already-linked
+  // entity is a no-op, so a user pasting the same invite code twice
+  // sees the same success path as the first time.
   try {
-    payload = await upstream.json();
+    await db.transact(db.tx.$users[userId].link({ groups: groupId }));
   } catch (err) {
-    console.error("join-group: admin returned non-JSON", err);
-    return json({ error: "directory returned non-JSON" }, 502);
+    console.error("join-group: link transact failed", err);
+    return json({ error: "couldn't add you to the group" }, 502);
   }
 
-  // Expected shape: { groups: [{ id, name }] } or { groups: [] }.
-  const groups =
-    payload && typeof payload === "object" && "groups" in payload
-      ? (payload as { groups: unknown }).groups
-      : null;
-  if (!Array.isArray(groups) || groups.length === 0) {
-    return json({ error: "no group with that invite code" }, 404);
-  }
-
-  const first = groups[0] as { id?: unknown; name?: unknown };
-  if (typeof first.id !== "string") {
-    return json({ error: "directory returned a malformed row" }, 502);
-  }
-  const name = typeof first.name === "string" ? first.name : "";
-  return json({ groupId: first.id, name }, 200);
+  return json({ groupId, name: groupName }, 200);
 }
 
 async function handleR2(key: string, env: Env): Promise<Response> {

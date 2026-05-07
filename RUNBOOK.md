@@ -594,7 +594,19 @@ there into the commands below (or `export INSTANT_APP_ID=<value>`
 once and use the `--env` flag) so there's only one source of
 truth for it in the repo.
 
-**Push local changes to production:**
+**Automated push (CI):**
+
+The deploy workflow (`.github/workflows/deploy.yml`) automatically pushes
+perms to InstantDB on every push to `main`, provided the `INSTANT_TOKEN`
+repository secret is set. To enable this:
+
+1. Log in locally: `npx instant-cli login`
+2. Copy the token printed by `npx instant-cli info` (or from
+   `~/.config/instant-cli/config.json`).
+3. Add it as a GitHub Actions secret named `INSTANT_TOKEN` in the repo's
+   *Settings → Secrets and variables → Actions*.
+
+**Push local changes to production manually:**
 
 ```sh
 cd app
@@ -623,10 +635,12 @@ Current rule set:
 - **`groups`** — view: members only (closed via PR #14, once
   the Worker's `/api/join-group` endpoint replaced the SPA's
   direct invite-code lookup). Create: any authed user. Update:
-  two shapes — existing members may rename (`name` only,
-  `inviteCode` and `createdAt` immutable); a non-member may
-  self-join by linking themselves into `members` via the
-  invite-code flow. Delete: blocked.
+  rename-only — existing members may change `name`; everything
+  else (`inviteCode`, `createdAt`, the `members` link) is
+  immutable from the client. Membership writes go through the
+  Worker's `/api/join-group` endpoint, which verifies the caller's
+  refresh token and links them to the group via admin transact.
+  Delete: blocked.
 - **`charts`** — view: members of the chart's group. Create:
   any authed user (`auth.id != null`); membership can't be
   enforced at create time because `newData.ref()` doesn't
@@ -642,7 +656,9 @@ Current rule set:
   any authed user (`auth.id != null`) — same `newData.ref()`
   limitation as `charts.create`; the members-only `view` rule
   hides any gift written to a chart the creator isn't a member
-  of. Update: blocked (gifts immutable per design). Delete: the
+  of. Update: group members may reposition a gift cluster by
+  writing `x`/`y` only — all other fields (`reason`, `count`,
+  `style`, `starImageUrl`) are immutable. Delete: the
   giver may remove their own gift to correct a mistake; all
   other deletes blocked.
 
