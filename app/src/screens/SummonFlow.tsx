@@ -14,6 +14,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Sky } from "../components/Sky";
 import { LoadingSky } from "../components/LoadingSky";
+import { ErrorScroll } from "../components/ErrorScroll";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useCurrentGroup } from "../hooks/useCurrentGroup";
 import { useChart } from "../hooks/useChart";
@@ -284,9 +285,12 @@ export default function SummonFlow() {
               <p style={errorHeadlineStyle}>
                 the stars didn't align — try again
               </p>
-              {errorMessage && (
-                <p style={errorDetailStyle}>{errorMessage}</p>
-              )}
+              <ErrorScroll
+                show={!!errorMessage}
+                message={errorMessage ?? ""}
+                tone="warning"
+                align="center"
+              />
               <button
                 type="button"
                 onClick={handleTryAgain}
@@ -309,10 +313,14 @@ export default function SummonFlow() {
                 in sync with the server. The friendly headline above is
                 the SPA's framing; the description below is authoritative.
               */}
-              <p style={errorDetailStyle}>{rateLimit.message}</p>
-              <p style={errorDetailStyle}>
-                try again {describeWait(rateLimit.retryAfterSeconds)}.
-              </p>
+              <ErrorScroll
+                show
+                message={rateLimit.message}
+                detail={`try again ${describeWait(rateLimit.retryAfterSeconds)}.`}
+                tone="soft"
+                align="center"
+                role="status"
+              />
               <button
                 type="button"
                 onClick={() =>
@@ -535,10 +543,5 @@ const errorHeadlineStyle: CSSProperties = {
   color: "var(--sc-fg)",
 };
 
-const errorDetailStyle: CSSProperties = {
-  margin: 0,
-  fontFamily: "var(--sc-sans)",
-  fontSize: "0.78rem",
-  color: "var(--sc-fg-faint)",
-  letterSpacing: "0.04em",
-};
+// errorDetailStyle removed — detail lines now render via <ErrorScroll>'s
+// `detail` slot. See app/src/components/ErrorScroll.tsx.

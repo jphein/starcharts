@@ -9,6 +9,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { id } from "@instantdb/react";
 import { Sky } from "../components/Sky";
+import { ErrorScroll } from "../components/ErrorScroll";
 import { db } from "../db/client";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useCurrentGroup } from "../hooks/useCurrentGroup";
@@ -146,9 +147,14 @@ export default function GroupSetup() {
                 style={inputStyle}
                 maxLength={60}
               />
-              {createState.status === "error" && (
-                <p style={errorStyle}>{createState.message}</p>
-              )}
+              <ErrorScroll
+                show={createState.status === "error"}
+                message={
+                  createState.status === "error" ? createState.message : ""
+                }
+                tone="warning"
+                style={{ marginTop: 4 }}
+              />
               <button
                 type="submit"
                 disabled={isLoading || submitting}
@@ -184,9 +190,14 @@ export default function GroupSetup() {
                 maxLength={6}
                 style={{ ...inputStyle, letterSpacing: "0.3em", textAlign: "center" }}
               />
-              {joinState.status === "error" && (
-                <p style={errorStyle}>{joinState.message}</p>
-              )}
+              <ErrorScroll
+                show={joinState.status === "error"}
+                message={
+                  joinState.status === "error" ? joinState.message : ""
+                }
+                tone="warning"
+                style={{ marginTop: 4 }}
+              />
               <button
                 type="submit"
                 disabled={isLoading || submitting}
@@ -322,14 +333,7 @@ function primaryButtonStyle(submitting: boolean): React.CSSProperties {
   };
 }
 
-const errorStyle: React.CSSProperties = {
-  margin: 0,
-  marginTop: "-0.2rem",
-  fontFamily: "var(--sc-serif)",
-  fontStyle: "italic",
-  color: "var(--sc-fg-muted)",
-  fontSize: "0.85rem",
-};
+// Per-screen errorStyle removed — see app/src/components/ErrorScroll.tsx.
 
 const dividerStyle: React.CSSProperties = {
   display: "flex",

@@ -7,6 +7,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sky } from "../components/Sky";
 import { LoadingSky } from "../components/LoadingSky";
+import { ErrorScroll } from "../components/ErrorScroll";
 import { db } from "../db/client";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useCurrentGroup } from "../hooks/useCurrentGroup";
@@ -99,7 +100,12 @@ export default function ProfileSetup() {
               placeholder="Your name"
               style={inputStyle}
             />
-            {errorMessage && <p style={errorStyle}>{errorMessage}</p>}
+            <ErrorScroll
+              show={!!errorMessage}
+              message={errorMessage ?? ""}
+              tone="warning"
+              style={{ marginTop: 4 }}
+            />
             <button
               type="submit"
               disabled={submitting}
@@ -207,11 +213,4 @@ function primaryButtonStyle(submitting: boolean): React.CSSProperties {
   };
 }
 
-const errorStyle: React.CSSProperties = {
-  margin: 0,
-  marginTop: "-0.2rem",
-  fontFamily: "var(--sc-serif)",
-  fontStyle: "italic",
-  color: "var(--sc-fg-muted)",
-  fontSize: "0.85rem",
-};
+// Per-screen errorStyle removed — see app/src/components/ErrorScroll.tsx.
