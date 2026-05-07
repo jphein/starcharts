@@ -188,29 +188,22 @@ const rules = {
       // immediately after creation.
       create: "auth.id != null",
 
-      // Members can update — but only the `completedAt` field is
-      // mutable, and only as a one-way transition from null to a
-      // timestamp. The rest of a chart (name, goalCount, reward,
-      // createdAt) is set at creation and stays put.
+      // Members can update active (non-completed) charts in two ways:
       //
-      // Three constraints:
-      //   1. `request.modifiedFields.all(field, field == 'completedAt')`
-      //      — only `completedAt` may appear in this update.
-      //   2. `data.completedAt == null` — the chart must currently
-      //      be incomplete. Once stamped, it can't be re-stamped or
-      //      cleared. This prevents toggle-loops that would retrigger
-      //      the celebrate scene + memory transition.
-      //   3. `newData.completedAt != null` — the new value must be
-      //      a real timestamp (no "uncomplete" via writing null).
+      //   1. Complete — stamp completedAt. One-way transition; the chart
+      //      must be currently null and the new value must be a real
+      //      timestamp. Prevents toggle-loops that retrigger celebrate/memory.
       //
-      // Per the design brief, completed charts become memories,
-      // not editable artifacts.
+      //   2. Edit goal — change goalCount while the chart is still active.
+      //      Validation that the new goal is above the current star count
+      //      is enforced client-side (the rule language can't join to gifts).
+      //      Completed charts become memories and are no longer editable.
       update:
-        "auth.id != null && " +
-        "auth.id in data.ref('group.members.id') && " +
-        "request.modifiedFields.all(field, field == 'completedAt') && " +
-        "data.completedAt == null && " +
-        "newData.completedAt != null",
+        "auth.id != null && auth.id in data.ref('group.members.id') && (" +
+        "(request.modifiedFields.all(field, field == 'completedAt') && data.completedAt == null && newData.completedAt != null)" +
+        " || " +
+        "(request.modifiedFields.all(field, field == 'goalCount') && data.completedAt == null)" +
+        ")",
 
       // Charts are not deletable in v1 — completed charts become
       // memories per the design brief.
