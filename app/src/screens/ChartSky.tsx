@@ -803,7 +803,6 @@ const progressSepStyle: CSSProperties = {
   opacity: 0.6,
 };
 
-<<<<<<< HEAD
 const confirmOverlayStyle: CSSProperties = {
   position: "absolute",
   top: 0,
@@ -851,8 +850,6 @@ const confirmDeleteStyle: CSSProperties = {
   cursor: "pointer",
 };
 
-=======
->>>>>>> origin/main
 const goalButtonStyle: CSSProperties = {
   background: "none",
   border: "none",
