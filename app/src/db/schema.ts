@@ -12,9 +12,17 @@ import { i } from "@instantdb/react";
 export const schema = i.schema({
   entities: {
     $users: i.entity({
-      email:        i.string().indexed(),
-      displayName:  i.string(),
-      avatarSeed:   i.string(),
+      // The $users namespace is system-managed (auth identity rows are
+      // created by InstantDB itself), so its attributes must be declared
+      // optional — InstantDB's `push schema` rejects required fields on
+      // $users even when our application code always populates them.
+      // email is set the moment a user authenticates with a magic code;
+      // displayName / avatarSeed are populated by ProfileSetup right
+      // after first sign-in. Code paths reading these fields already
+      // tolerate "" / undefined gracefully.
+      email:        i.string().indexed().optional(),
+      displayName:  i.string().optional(),
+      avatarSeed:   i.string().optional(),
     }),
     groups: i.entity({
       name:         i.string(),
