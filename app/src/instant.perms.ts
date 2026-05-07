@@ -205,9 +205,11 @@ const rules = {
         "(request.modifiedFields.all(field, field == 'goalCount') && data.completedAt == null)" +
         ")",
 
-      // Charts are not deletable in v1 — completed charts become
-      // memories per the design brief.
-      delete: "false",
+      // Group members may delete active (non-completed) charts — e.g.
+      // to discard one created by mistake. Completed charts are
+      // permanent memories and cannot be deleted from the client.
+      delete:
+        "auth.id != null && auth.id in data.ref('group.members.id') && data.completedAt == null",
     },
   },
 
