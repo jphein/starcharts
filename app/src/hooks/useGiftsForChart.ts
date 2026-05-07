@@ -2,11 +2,13 @@
 // so star clusters appear in arrival order.
 //
 // `GiftWithLinks` flattens the InstaQL nested-link rows into the plain
-// `Gift` shape with `giver` (single user) and `honorees` (many users)
-// already resolved, so screens can render names without re-querying.
+// `Gift` shape with `giver` (single user), `honorees` ($users members),
+// and `rosterHonorees` (ad-hoc roster entries) already resolved, so
+// screens can render names without re-querying. The two honoree
+// surfaces coexist on every gift; either or both may be empty.
 
 import { db } from "../db/client";
-import type { Gift, User } from "../types";
+import type { Gift, RosterEntry, User } from "../types";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -18,6 +20,7 @@ function isUuid(s: string | undefined): s is string {
 export type GiftWithLinks = Gift & {
   giver: User | null;
   honorees: User[];
+  rosterHonorees: RosterEntry[];
 };
 
 interface UseGiftsForChartResult {
@@ -39,6 +42,20 @@ function toUser(u: {
   };
 }
 
+function toRosterEntry(r: {
+  id: string;
+  displayName?: string;
+  avatarSeed?: string;
+  createdAt?: number;
+}): RosterEntry {
+  return {
+    id: r.id,
+    displayName: r.displayName ?? "",
+    avatarSeed: r.avatarSeed ?? "",
+    createdAt: r.createdAt ?? 0,
+  };
+}
+
 export function useGiftsForChart(
   chartId: string | undefined,
 ): UseGiftsForChartResult {
@@ -51,6 +68,7 @@ export function useGiftsForChart(
             $: { where: { "chart.id": chartId } },
             giver: {},
             honorees: {},
+            rosterHonorees: {},
           },
         }
       : null,
@@ -81,6 +99,12 @@ export function useGiftsForChart(
         ? honoreesRaw.map((h) => toUser(h as { id: string }))
         : [];
 
+      const rosterRaw = (g as unknown as { rosterHonorees?: unknown })
+        .rosterHonorees;
+      const rosterHonorees: RosterEntry[] = Array.isArray(rosterRaw)
+        ? rosterRaw.map((r) => toRosterEntry(r as { id: string }))
+        : [];
+
       return {
         id: g.id,
         reason: g.reason,
@@ -92,6 +116,7 @@ export function useGiftsForChart(
         createdAt: g.createdAt,
         giver,
         honorees,
+        rosterHonorees,
       };
     })
     .sort((a, b) => a.createdAt - b.createdAt);

@@ -37,3 +37,13 @@ export interface Gift {
   y: number;
   createdAt: number;
 }
+
+// Ad-hoc honoree on a group's shared roster (e.g. a child without an
+// account). Group-shared, selectable in the gift picker alongside
+// $users members. Linked to gifts via `giftRosterHonorees`.
+export interface RosterEntry {
+  id: string;
+  displayName: string;
+  avatarSeed: string;
+  createdAt: number;
+}

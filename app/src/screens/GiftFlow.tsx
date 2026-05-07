@@ -29,7 +29,21 @@ import { useGiftsForChart } from "../hooks/useGiftsForChart";
 import { pickGiftAnchor } from "../lib/starPositioning";
 import { presetUrl } from "../lib/presets";
 import { summonStashKey } from "./SummonFlow";
-import type { User } from "../types";
+import type { RosterEntry, User } from "../types";
+
+// A pickable recipient — either a $user member of the group, or an
+// ad-hoc rosterEntry. Both render identically in the merged grid.
+// Selection state keys on `kind:id` so we can split it back into
+// userIds vs rosterIds at submit time.
+type Pickable =
+  | { kind: "user";   id: string; displayName: string; avatarSeed: string }
+  | { kind: "roster"; id: string; displayName: string; avatarSeed: string };
+
+function pickableKey(p: Pick<Pickable, "kind" | "id">): string {
+  return `${p.kind}:${p.id}`;
+}
+
+const ROSTER_NAME_MAX = 30;
 
 type Step = "honorees" | "reason" | "preset" | "confirm";
 
@@ -80,7 +94,10 @@ export default function GiftFlow() {
     useGiftsForChart(chartId);
 
   const [step, setStep] = useState<Step>("honorees");
-  const [honoreeIds, setHonoreeIds] = useState<string[]>([]);
+  // Selection is a set of `kind:id` keys (e.g. "user:abc-123" /
+  // "roster:def-456") so we can mix $users members and rosterEntries
+  // in one grid and split the selection back at submit time.
+  const [honoreeKeys, setHonoreeKeys] = useState<string[]>([]);
   const [reason, setReason] = useState("");
   const [style, setStyle] = useState<string | null>(null);
   const [customImageUrl, setCustomImageUrl] = useState<string | null>(null);
@@ -88,6 +105,30 @@ export default function GiftFlow() {
   const [submitState, setSubmitState] = useState<SubmitState>({
     status: "idle",
   });
+
+  // Live roster query — every group member sees the same list. The
+  // `groupId` short-circuit prevents firing the query before
+  // useCurrentGroup has resolved (which would write `null` into the
+  // where clause and panic InstaQL).
+  const groupId = group?.id;
+  const rosterResult = db.useQuery(
+    groupId
+      ? {
+          rosterEntries: {
+            $: { where: { "group.id": groupId } },
+          },
+        }
+      : null,
+  );
+  const rosterEntries: RosterEntry[] = useMemo(() => {
+    const rows = rosterResult.data?.rosterEntries ?? [];
+    return rows.map((r) => ({
+      id: r.id,
+      displayName: r.displayName ?? "",
+      avatarSeed: r.avatarSeed ?? "",
+      createdAt: r.createdAt ?? 0,
+    }));
+  }, [rosterResult.data]);
 
   // Hydrate the in-flight gift draft + any summoned custom star if
   // we came back from /summon. Without this, the user's honoree
@@ -110,12 +151,23 @@ export default function GiftFlow() {
     if (draftRaw) {
       try {
         const draft = JSON.parse(draftRaw) as {
+          // New (post-roster): kind-tagged keys like "user:…" / "roster:…".
+          honoreeKeys?: string[];
+          // Legacy (pre-roster): bare $user ids. Migrate by tagging.
           honoreeIds?: string[];
           reason?: string;
           count?: number;
         };
-        if (Array.isArray(draft.honoreeIds)) {
-          setHonoreeIds(draft.honoreeIds.filter((s) => typeof s === "string"));
+        if (Array.isArray(draft.honoreeKeys)) {
+          setHonoreeKeys(
+            draft.honoreeKeys.filter((s) => typeof s === "string"),
+          );
+        } else if (Array.isArray(draft.honoreeIds)) {
+          setHonoreeKeys(
+            draft.honoreeIds
+              .filter((s) => typeof s === "string")
+              .map((uid) => `user:${uid}`),
+          );
         }
         if (typeof draft.reason === "string") setReason(draft.reason);
         if (typeof draft.count === "number" && draft.count >= 1) {
@@ -190,7 +242,37 @@ export default function GiftFlow() {
     return members.filter((m) => m.id !== user.id);
   }, [members, user]);
 
-  const honoreeSet = useMemo(() => new Set(honoreeIds), [honoreeIds]);
+  // Merged pickable list — $users members (excluding self) + roster
+  // entries, sorted alphabetically by displayName so adding a new
+  // ad-hoc honoree doesn't shuffle the visual position of existing
+  // ones unpredictably. Empty displayNames sort to the end.
+  const pickables: Pickable[] = useMemo(() => {
+    const userPickables: Pickable[] = otherMembers.map((m) => ({
+      kind: "user",
+      id: m.id,
+      displayName: m.displayName || m.email || "",
+      avatarSeed: m.avatarSeed || m.id,
+    }));
+    const rosterPickables: Pickable[] = rosterEntries.map((r) => ({
+      kind: "roster",
+      id: r.id,
+      displayName: r.displayName || "",
+      avatarSeed: r.avatarSeed || r.id,
+    }));
+    return [...userPickables, ...rosterPickables].sort((a, b) => {
+      const an = a.displayName.toLowerCase();
+      const bn = b.displayName.toLowerCase();
+      if (!an && !bn) return 0;
+      if (!an) return 1;
+      if (!bn) return -1;
+      return an.localeCompare(bn);
+    });
+  }, [otherMembers, rosterEntries]);
+
+  const honoreeKeySet = useMemo(
+    () => new Set(honoreeKeys),
+    [honoreeKeys],
+  );
   const trimmedReason = reason.trim();
 
   if (
@@ -205,23 +287,34 @@ export default function GiftFlow() {
     return <LoadingSky />;
   }
 
-  function toggleHonoree(memberId: string) {
-    setHonoreeIds((prev) =>
-      prev.includes(memberId)
-        ? prev.filter((p) => p !== memberId)
-        : [...prev, memberId],
+  function toggleHonoree(key: string) {
+    setHonoreeKeys((prev) =>
+      prev.includes(key)
+        ? prev.filter((p) => p !== key)
+        : [...prev, key],
     );
   }
 
   async function handleSubmit() {
     if (submitState.status === "submitting") return;
     if (!chartId || !chart || !user) return;
-    if (honoreeIds.length === 0 || !trimmedReason || !style || count < 1) {
+    if (honoreeKeys.length === 0 || !trimmedReason || !style || count < 1) {
       setSubmitState({
         status: "error",
         message: "Something's missing — go back a step and check.",
       });
       return;
+    }
+
+    // Split mixed selection back into the two link targets. Both
+    // links coexist on a gift; either array may be empty as long as
+    // their union is non-empty (which the guard above ensures).
+    const userHonoreeIds: string[] = [];
+    const rosterHonoreeIds: string[] = [];
+    for (const k of honoreeKeys) {
+      if (k.startsWith("user:")) userHonoreeIds.push(k.slice("user:".length));
+      else if (k.startsWith("roster:"))
+        rosterHonoreeIds.push(k.slice("roster:".length));
     }
 
     setSubmitState({ status: "submitting" });
@@ -252,7 +345,12 @@ export default function GiftFlow() {
           y: anchor.y,
           createdAt: Date.now(),
         })
-        .link({ chart: chartId, giver: user.id, honorees: honoreeIds });
+        .link({
+          chart: chartId,
+          giver: user.id,
+          honorees: userHonoreeIds,
+          rosterHonorees: rosterHonoreeIds,
+        });
 
       if (wouldHitGoal) {
         await db.transact([
@@ -307,7 +405,7 @@ export default function GiftFlow() {
 
   function goNext() {
     setSubmitState({ status: "idle" });
-    if (step === "honorees" && honoreeIds.length > 0) setStep("reason");
+    if (step === "honorees" && honoreeKeys.length > 0) setStep("reason");
     else if (step === "reason" && trimmedReason.length > 0) setStep("preset");
     else if (step === "preset" && style) setStep("confirm");
   }
@@ -327,11 +425,12 @@ export default function GiftFlow() {
             <span style={stepDotStyle(step === "confirm")} />
           </p>
 
-          {step === "honorees" && (
+          {step === "honorees" && groupId && (
             <HonoreesGrid
-              members={otherMembers}
-              selected={honoreeSet}
+              pickables={pickables}
+              selected={honoreeKeySet}
               onToggle={toggleHonoree}
+              groupId={groupId}
             />
           )}
 
@@ -366,7 +465,7 @@ export default function GiftFlow() {
                 try {
                   window.sessionStorage.setItem(
                     giftDraftKey(chartId),
-                    JSON.stringify({ honoreeIds, reason, count }),
+                    JSON.stringify({ honoreeKeys, reason, count }),
                   );
                 } catch {
                   // sessionStorage unavailable — proceed anyway;
@@ -381,7 +480,9 @@ export default function GiftFlow() {
 
           {step === "confirm" && (
             <ConfirmStep
-              honorees={otherMembers.filter((m) => honoreeSet.has(m.id))}
+              honorees={pickables.filter((p) =>
+                honoreeKeySet.has(pickableKey(p)),
+              )}
               reason={trimmedReason}
               style={style!}
               customImageUrl={customImageUrl}
@@ -418,14 +519,14 @@ export default function GiftFlow() {
               <button
                 type="button"
                 style={primaryButtonStyle(false, !canAdvance(step, {
-                  honoreeIds,
+                  honoreeKeys,
                   reason: trimmedReason,
                   style,
                 }))}
                 onClick={goNext}
                 disabled={
                   !canAdvance(step, {
-                    honoreeIds,
+                    honoreeKeys,
                     reason: trimmedReason,
                     style,
                   })
@@ -443,57 +544,325 @@ export default function GiftFlow() {
 
 function canAdvance(
   step: Step,
-  draft: { honoreeIds: string[]; reason: string; style: string | null },
+  draft: { honoreeKeys: string[]; reason: string; style: string | null },
 ): boolean {
-  if (step === "honorees") return draft.honoreeIds.length > 0;
+  if (step === "honorees") return draft.honoreeKeys.length > 0;
   if (step === "reason") return draft.reason.length > 0;
   if (step === "preset") return draft.style != null;
   return true;
 }
 
 function HonoreesGrid({
-  members,
+  pickables,
   selected,
   onToggle,
+  groupId,
 }: {
-  members: User[];
+  pickables: Pickable[];
   selected: Set<string>;
-  onToggle: (id: string) => void;
+  onToggle: (key: string) => void;
+  groupId: string;
 }) {
-  if (members.length === 0) {
-    return (
-      <p style={emptyStateStyle}>
-        Your group has no other members yet — invite someone from the dashboard
-        first.
-      </p>
-    );
-  }
+  // Add-form state (inline, no modal/route). When `addOpen` is true the
+  // grid renders an inline editor below itself. Optimistic transact
+  // creates the rosterEntry + group link in one go; the new row appears
+  // in the grid via the live useQuery a beat later, so we don't have to
+  // re-select it explicitly.
+  const [addOpen, setAddOpen] = useState(false);
+  // Per-row inline rename state. Keys on `roster:<id>` (only roster
+  // entries are editable; $users members are renamed in their profile).
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+
   return (
-    <div style={honoreesGridStyle}>
-      {members.map((m) => {
-        const isOn = selected.has(m.id);
-        const seed = m.avatarSeed || m.id;
-        return (
-          <button
-            key={m.id}
-            type="button"
-            role="checkbox"
-            aria-checked={isOn}
-            onClick={() => onToggle(m.id)}
-            style={honoreeCardStyle(isOn)}
-          >
-            <span
-              style={{
-                ...avatarDotStyle,
-                background: avatarColor(seed),
-              }}
-            />
-            <span style={honoreeNameStyle}>
-              {m.displayName || m.email || "someone"}
-            </span>
-          </button>
-        );
-      })}
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {pickables.length === 0 ? (
+        <p style={emptyStateStyle}>
+          No one to pick yet — invite a group member from the dashboard, or
+          add a family member below.
+        </p>
+      ) : (
+        <div style={honoreesGridStyle}>
+          {pickables.map((p) => {
+            const key = pickableKey(p);
+            const isOn = selected.has(key);
+            const seed = p.avatarSeed || p.id;
+            const isRoster = p.kind === "roster";
+            const isEditing = isRoster && editingKey === key;
+
+            if (isEditing) {
+              return (
+                <RosterEditCard
+                  key={key}
+                  entryId={p.id}
+                  initialName={p.displayName}
+                  initialSeed={p.avatarSeed}
+                  onDone={() => setEditingKey(null)}
+                />
+              );
+            }
+
+            return (
+              <div key={key} style={honoreeCardWrapStyle}>
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={isOn}
+                  onClick={() => onToggle(key)}
+                  style={honoreeCardStyle(isOn)}
+                >
+                  <span
+                    style={{
+                      ...avatarDotStyle,
+                      background: avatarColor(seed),
+                    }}
+                  />
+                  <span style={honoreeNameStyle}>
+                    {p.displayName || "someone"}
+                  </span>
+                </button>
+                {isRoster && (
+                  <RosterRowActions
+                    onEdit={() => setEditingKey(key)}
+                    onDelete={async () => {
+                      // Unlink-only: existing gifts that referenced
+                      // this entry simply lose the link (per perms
+                      // delete rule + InstantDB no-cascade). We don't
+                      // confirm here — the action sits behind a small
+                      // icon, so accidental taps are unlikely.
+                      try {
+                        await db.transact(db.tx.rosterEntries[p.id].delete());
+                      } catch {
+                        // Best-effort; surface nothing for now (the
+                        // entry just stays visible if delete failed).
+                      }
+                    }}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {addOpen ? (
+        <RosterAddForm
+          groupId={groupId}
+          onCancel={() => setAddOpen(false)}
+          onAdded={() => setAddOpen(false)}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAddOpen(true)}
+          style={addRosterLinkStyle}
+        >
+          + add a family member
+        </button>
+      )}
+    </div>
+  );
+}
+
+function RosterAddForm({
+  groupId,
+  onCancel,
+  onAdded,
+}: {
+  groupId: string;
+  onCancel: () => void;
+  onAdded: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Live preview swatch — same color hash the picker uses, so what you
+  // see while typing matches what'll appear in the grid after submit.
+  const previewSeed = name.trim() || "new";
+
+  async function handleSubmit() {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setErrorMessage("Pick a name first.");
+      return;
+    }
+    if (submitting) return;
+    setSubmitting(true);
+    setErrorMessage(null);
+    try {
+      const newId = id();
+      await db.transact(
+        db.tx.rosterEntries[newId]
+          .update({
+            displayName: trimmed,
+            // Avatar is just a color hash today — seed = the lowercased
+            // name, matching ProfileSetup's convention so a roster
+            // "Maya" gets the same color as a $users "Maya" would.
+            avatarSeed: trimmed.toLowerCase(),
+            createdAt: Date.now(),
+          })
+          .link({ group: groupId }),
+      );
+      setName("");
+      onAdded();
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error
+          ? err.message
+          : "Couldn't add — try again.",
+      );
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div style={rosterFormStyle}>
+      <div style={rosterFormRowStyle}>
+        <span
+          style={{
+            ...avatarDotStyle,
+            width: 18,
+            height: 18,
+            background: avatarColor(previewSeed),
+          }}
+        />
+        <input
+          autoFocus
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={ROSTER_NAME_MAX}
+          placeholder="their name"
+          disabled={submitting}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void handleSubmit();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              onCancel();
+            }
+          }}
+          style={rosterInputStyle}
+        />
+      </div>
+      <div style={rosterFormButtonsStyle}>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={submitting}
+          style={rosterCancelBtnStyle}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleSubmit()}
+          disabled={submitting || !name.trim()}
+          style={rosterAddBtnStyle(submitting || !name.trim())}
+        >
+          {submitting ? "Adding…" : "Add"}
+        </button>
+      </div>
+      {errorMessage && <p style={rosterErrorStyle}>{errorMessage}</p>}
+    </div>
+  );
+}
+
+function RosterEditCard({
+  entryId,
+  initialName,
+  initialSeed,
+  onDone,
+}: {
+  entryId: string;
+  initialName: string;
+  initialSeed: string;
+  onDone: () => void;
+}) {
+  const [name, setName] = useState(initialName);
+  const [submitting, setSubmitting] = useState(false);
+  const previewSeed = name.trim().toLowerCase() || initialSeed || entryId;
+
+  async function handleSave() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (trimmed === initialName) {
+      onDone();
+      return;
+    }
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await db.transact(
+        db.tx.rosterEntries[entryId].update({
+          displayName: trimmed,
+          avatarSeed: trimmed.toLowerCase(),
+        }),
+      );
+      onDone();
+    } catch {
+      // Revert UI; entry keeps its prior name from the live query.
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div style={honoreeCardStyle(false)}>
+      <span
+        style={{
+          ...avatarDotStyle,
+          background: avatarColor(previewSeed),
+        }}
+      />
+      <input
+        autoFocus
+        type="text"
+        value={name}
+        maxLength={ROSTER_NAME_MAX}
+        onChange={(e) => setName(e.target.value)}
+        disabled={submitting}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void handleSave();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onDone();
+          }
+        }}
+        onBlur={() => void handleSave()}
+        style={rosterInlineInputStyle}
+      />
+    </div>
+  );
+}
+
+function RosterRowActions({
+  onEdit,
+  onDelete,
+}: {
+  onEdit: () => void;
+  onDelete: () => void | Promise<void>;
+}) {
+  return (
+    <div style={rosterRowActionsStyle}>
+      <button
+        type="button"
+        onClick={onEdit}
+        aria-label="Rename"
+        style={rosterIconBtnStyle}
+      >
+        ✎
+      </button>
+      <button
+        type="button"
+        onClick={() => void onDelete()}
+        aria-label="Remove"
+        style={rosterIconBtnStyle}
+      >
+        ×
+      </button>
     </div>
   );
 }
@@ -616,7 +985,7 @@ function ConfirmStep({
   customImageUrl,
   count,
 }: {
-  honorees: User[];
+  honorees: Pickable[];
   reason: string;
   style: string;
   customImageUrl: string | null;
@@ -675,7 +1044,7 @@ function ConfirmStep({
           {honorees.length === 0
             ? "no one yet"
             : honorees
-                .map((h) => h.displayName || h.email || "someone")
+                .map((h) => h.displayName || "someone")
                 .join(" & ")}
         </span>
       </div>
@@ -1060,4 +1429,127 @@ const inlineLinkStyle: CSSProperties = {
 const inlineDotStyle: CSSProperties = {
   color: "var(--sc-fg-faint)",
   opacity: 0.6,
+};
+
+// Wraps each honoree pill so the small edit/delete affordances can sit
+// at the right edge without becoming part of the pill button itself
+// (otherwise they'd toggle selection on click).
+const honoreeCardWrapStyle: CSSProperties = {
+  position: "relative",
+};
+
+const rosterRowActionsStyle: CSSProperties = {
+  position: "absolute",
+  top: 4,
+  right: 6,
+  display: "inline-flex",
+  gap: 2,
+};
+
+const rosterIconBtnStyle: CSSProperties = {
+  background: "transparent",
+  border: "none",
+  color: "var(--sc-fg-faint)",
+  fontFamily: "var(--sc-sans)",
+  fontSize: 12,
+  lineHeight: 1,
+  padding: "2px 4px",
+  cursor: "pointer",
+  borderRadius: 4,
+  opacity: 0.65,
+};
+
+const addRosterLinkStyle: CSSProperties = {
+  alignSelf: "flex-start",
+  background: "transparent",
+  border: "1px dashed var(--sc-stroke)",
+  color: "var(--sc-fg-muted)",
+  fontFamily: "var(--sc-sans)",
+  fontSize: "0.78rem",
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  cursor: "pointer",
+  padding: "0.55rem 0.9rem",
+  borderRadius: "var(--sc-radius-pill, 999px)",
+};
+
+const rosterFormStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+  padding: "12px 14px",
+  background: "var(--sc-surface-solid)",
+  border: "1px solid var(--sc-stroke)",
+  borderRadius: "var(--sc-radius-inline, 12px)",
+  textAlign: "left",
+};
+
+const rosterFormRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+};
+
+const rosterInputStyle: CSSProperties = {
+  flex: "1 1 auto",
+  background: "transparent",
+  border: "1px solid var(--sc-stroke)",
+  borderRadius: "var(--sc-radius-inline, 8px)",
+  padding: "8px 10px",
+  color: "var(--sc-fg)",
+  fontFamily: "var(--sc-serif)",
+  fontSize: "1rem",
+  outline: "none",
+};
+
+const rosterInlineInputStyle: CSSProperties = {
+  flex: "1 1 auto",
+  minWidth: 0,
+  background: "transparent",
+  border: "none",
+  outline: "none",
+  color: "var(--sc-fg)",
+  fontFamily: "var(--sc-serif)",
+  fontSize: "1rem",
+};
+
+const rosterFormButtonsStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 8,
+};
+
+const rosterCancelBtnStyle: CSSProperties = {
+  background: "transparent",
+  border: "none",
+  color: "var(--sc-fg-faint)",
+  fontFamily: "var(--sc-sans)",
+  fontSize: "0.74rem",
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  cursor: "pointer",
+  padding: "0.45rem 0.7rem",
+};
+
+function rosterAddBtnStyle(disabled: boolean): CSSProperties {
+  return {
+    background: disabled ? "transparent" : "var(--sc-gold)",
+    color: disabled ? "var(--sc-fg-faint)" : "#1a1106",
+    border: disabled ? "1px solid var(--sc-stroke)" : "none",
+    borderRadius: "var(--sc-radius-pill, 999px)",
+    padding: "0.5rem 1rem",
+    fontFamily: "var(--sc-sans)",
+    fontWeight: 600,
+    fontSize: "0.8rem",
+    letterSpacing: "0.06em",
+    cursor: disabled ? "not-allowed" : "pointer",
+  };
+}
+
+const rosterErrorStyle: CSSProperties = {
+  margin: 0,
+  fontFamily: "var(--sc-serif)",
+  fontStyle: "italic",
+  fontSize: "0.82rem",
+  color: "var(--sc-fg-muted)",
 };
