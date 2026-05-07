@@ -66,6 +66,7 @@ export default function ChartSky() {
   }, [giftsLoading, gifts]);
 
   const [selectedGift, setSelectedGift] = useState<GiftWithLinks | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState("");
   const goalInputRef = useRef<HTMLInputElement>(null);
@@ -647,8 +648,44 @@ export default function ChartSky() {
               </button>
             )}
           </div>
+          {chart.completedAt == null && (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              style={iconButtonStyle}
+              aria-label="Delete chart"
+              title="Delete chart"
+            >
+              🗑
+            </button>
+          )}
         </div>
       </header>
+
+      {confirmDelete && (
+        <div style={confirmOverlayStyle}>
+          <span style={confirmTextStyle}>Delete this chart?</span>
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(false)}
+            style={confirmCancelStyle}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmDelete(false);
+              db.transact(db.tx.charts[chartId!].delete()).catch((err) =>
+                console.warn("[chart-sky] delete failed", err),
+              );
+            }}
+            style={confirmDeleteStyle}
+          >
+            Delete
+          </button>
+        </div>
+      )}
 
       <button
         type="button"
@@ -765,6 +802,56 @@ const progressSepStyle: CSSProperties = {
   opacity: 0.6,
 };
 
+<<<<<<< HEAD
+const confirmOverlayStyle: CSSProperties = {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  zIndex: 20,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 10,
+  padding: "14px 20px",
+  background: "rgba(20,10,0,0.92)",
+  backdropFilter: "blur(12px)",
+  WebkitBackdropFilter: "blur(12px)",
+  borderBottom: "1px solid var(--sc-stroke)",
+};
+
+const confirmTextStyle: CSSProperties = {
+  fontFamily: "var(--sc-sans)",
+  fontSize: 14,
+  color: "var(--sc-fg)",
+  flex: 1,
+};
+
+const confirmCancelStyle: CSSProperties = {
+  padding: "6px 16px",
+  borderRadius: 999,
+  border: "1px solid var(--sc-stroke)",
+  background: "none",
+  color: "var(--sc-fg)",
+  fontFamily: "var(--sc-sans)",
+  fontSize: 13,
+  cursor: "pointer",
+};
+
+const confirmDeleteStyle: CSSProperties = {
+  padding: "6px 16px",
+  borderRadius: 999,
+  border: "none",
+  background: "#c0392b",
+  color: "#fff",
+  fontFamily: "var(--sc-sans)",
+  fontSize: 13,
+  fontWeight: 500,
+  cursor: "pointer",
+};
+
+=======
+>>>>>>> origin/main
 const goalButtonStyle: CSSProperties = {
   background: "none",
   border: "none",
