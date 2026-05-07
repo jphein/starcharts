@@ -37,6 +37,15 @@ export const schema = i.schema({
       y:             i.number(),
       createdAt:     i.number(),
     }),
+    // Ad-hoc honorees (kids without accounts). Group-shared: every member
+    // sees the same roster. Selectable in the gift picker alongside $users
+    // members. Unlinked-only delete — removing a roster entry doesn't
+    // cascade to gifts already attached, those just lose the link.
+    rosterEntries: i.entity({
+      displayName: i.string(),
+      avatarSeed:  i.string(),
+      createdAt:   i.number(),
+    }),
   },
   links: {
     groupMembers: {
@@ -58,6 +67,14 @@ export const schema = i.schema({
     giftHonorees: {
       forward: { on: "gifts",   has: "many", label: "honorees" },
       reverse: { on: "$users",  has: "many", label: "received" },
+    },
+    rosterEntryGroup: {
+      forward: { on: "rosterEntries", has: "one",  label: "group"         },
+      reverse: { on: "groups",        has: "many", label: "rosterEntries" },
+    },
+    giftRosterHonorees: {
+      forward: { on: "gifts",         has: "many", label: "rosterHonorees" },
+      reverse: { on: "rosterEntries", has: "many", label: "received"       },
     },
   },
   rooms: {

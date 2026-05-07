@@ -7,6 +7,25 @@
 // equivalent of the rules below.)
 //
 // History:
+//   2026-05-07 — added rosterEntries entity + rules. The roster lets a
+//                group register ad-hoc honorees (children who don't have
+//                accounts) so they can be picked alongside $users members
+//                in the gift recipient picker. Rules mirror the
+//                groups/charts pattern: members-only view (anchored on the
+//                entry's group → members → ids), any authed user may
+//                create (the same `newData.ref()` constraint that limits
+//                charts/gifts.create applies — read path is members-only,
+//                so a misrouted create is invisible), members may update
+//                displayName/avatarSeed only (createdAt is immutable; the
+//                group link is admin-write-only via the same rationale as
+//                groups.update — modifiedFields-only checks can't
+//                constrain *which* row a link points at, but in practice
+//                members own the rename/recolor surface), and members may
+//                delete (unlink-only behavior — InstantDB does not
+//                cascade, so existing gifts simply lose their honoree
+//                link). The groups.update rename-only invariant from
+//                2026-05-06 is preserved exactly.
+//
 //   2026-05-03 — added $users view rule. InstantDB's default for
 //                $users hides every row except the authed user's
 //                own, which broke `useCurrentGroup`'s members
@@ -246,6 +265,39 @@ const rules = {
         "auth.id in data.ref('chart.group.members.id') && " +
         "request.modifiedFields.all(field, field == 'x' || field == 'y')",
       delete: "auth.id != null && auth.id in data.ref('giver.id')",
+    },
+  },
+
+  rosterEntries: {
+    allow: {
+      // Members of the entry's group can see it. Path:
+      // rosterEntry → its group → that group's members → ids.
+      view: "auth.id != null && auth.id in data.ref('group.members.id')",
+
+      // Any authed user can create a rosterEntry row. Same realistic
+      // mitigation as groups/charts/gifts.create: InstantDB can't evaluate
+      // `newData.ref()` link traversal at create time, but the read path
+      // above is members-only, so a misrouted create is invisible to
+      // everyone — including the creator — immediately after creation.
+      create: "auth.id != null",
+
+      // Members may update displayName/avatarSeed only. createdAt is
+      // immutable, and the `group` link is excluded from the allowed
+      // field set so a member cannot re-target an existing entry into a
+      // different group. Uses `modifiedFields.all(...)` so a partial
+      // `{displayName:…}` update passes without the unchanged-fields-as-null
+      // edge case that bit groups/charts.update before.
+      update:
+        "auth.id != null && " +
+        "auth.id in data.ref('group.members.id') && " +
+        "request.modifiedFields.all(field, field == 'displayName' || field == 'avatarSeed')",
+
+      // Members may delete entries. InstantDB does not cascade — any
+      // gifts already linked via giftRosterHonorees simply lose the
+      // link, which renders as "for someone" / falls out of the
+      // honoree list. This matches the v1 spec: removing a roster
+      // entry should not retroactively delete or rewrite gifts.
+      delete: "auth.id != null && auth.id in data.ref('group.members.id')",
     },
   },
 } satisfies InstantRules;

@@ -48,7 +48,13 @@ export function GiftCard({ gift, onClose, currentUserId }: GiftCardProps) {
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
-  const honoreeNames = gift.honorees.map((h) => h.displayName).filter(Boolean);
+  // Merge $users honorees with ad-hoc roster honorees — both surfaces
+  // are displayed identically (same chip pattern), distinguished only
+  // by where they came from in the picker. Either may be empty.
+  const honoreeNames = [
+    ...gift.honorees.map((h) => h.displayName),
+    ...gift.rosterHonorees.map((r) => r.displayName),
+  ].filter(Boolean);
   const honoreeLabel =
     honoreeNames.length > 0 ? honoreeNames.join(", ") : "someone";
   const giverName = gift.giver?.displayName ?? "someone";
