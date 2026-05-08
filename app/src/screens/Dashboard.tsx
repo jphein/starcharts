@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Sky } from "../components/Sky";
 import { LoadingSky } from "../components/LoadingSky";
@@ -71,10 +72,6 @@ const switcherChevronStyle: CSSProperties = {
 };
 
 const switcherDropdownStyle: CSSProperties = {
-  position: "absolute",
-  top: "calc(100% + 8px)",
-  left: 0,
-  zIndex: 50,
   minWidth: 220,
   background: "var(--sc-bg, #0d0a14)",
   border: "1px solid var(--sc-stroke)",
@@ -152,6 +149,8 @@ export default function Dashboard() {
   // Surfaced if the group-rename transact fails (perms, network).
   const [renameError, setRenameError] = useState<string | null>(null);
   const [switcherOpen, setSwitcherOpen] = useState(false);
+  const switcherAnchorRef = useRef<HTMLDivElement>(null);
+  const [switcherRect, setSwitcherRect] = useState<{ top: number; left: number } | null>(null);
 
   // Auth gate: not loading, no user → sign in.
   useEffect(() => {
@@ -252,13 +251,19 @@ export default function Dashboard() {
         }}
       >
         <header style={headerStyle}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4, position: "relative" }}>
+          <div ref={switcherAnchorRef} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ ...eyebrowStyle, color: "var(--sc-gold)" }}>your group</span>
               {userGroups.length > 1 && (
                 <button
                   type="button"
-                  onClick={() => setSwitcherOpen((o) => !o)}
+                  onClick={() => {
+                    if (!switcherOpen && switcherAnchorRef.current) {
+                      const r = switcherAnchorRef.current.getBoundingClientRect();
+                      setSwitcherRect({ top: r.bottom + 8, left: r.left });
+                    }
+                    setSwitcherOpen((o) => !o);
+                  }}
                   style={switcherChevronStyle}
                   aria-label="Switch group"
                 >
@@ -312,42 +317,6 @@ export default function Dashboard() {
               </h1>
             )}
 
-            {switcherOpen && (
-              <>
-                <div
-                  style={{ position: "fixed", inset: 0, zIndex: 49 }}
-                  onClick={() => setSwitcherOpen(false)}
-                />
-                <div style={switcherDropdownStyle}>
-                  {userGroups.map((g) => (
-                    <button
-                      key={g.id}
-                      type="button"
-                      onClick={() => { setCurrentGroupId(g.id); setSwitcherOpen(false); }}
-                      style={{ ...switcherRowStyle, fontWeight: g.id === group.id ? 600 : 400 }}
-                    >
-                      <span style={{ flex: 1, textAlign: "left" }}>{g.name}</span>
-                      {g.id === group.id && <span style={{ color: "var(--sc-gold)", fontSize: 12 }}>✓</span>}
-                    </button>
-                  ))}
-                  <div style={switcherDividerStyle} />
-                  <button
-                    type="button"
-                    onClick={() => { setSwitcherOpen(false); navigate("/group-setup?tab=join"); }}
-                    style={switcherActionStyle}
-                  >
-                    + Join another group
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setSwitcherOpen(false); navigate("/group-setup?tab=create"); }}
-                    style={switcherActionStyle}
-                  >
-                    + Create new group
-                  </button>
-                </div>
-              </>
-            )}
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
@@ -433,6 +402,44 @@ export default function Dashboard() {
           )}
         </main>
       </div>
+
+      {switcherOpen && switcherRect && createPortal(
+        <>
+          <div
+            style={{ position: "fixed", inset: 0, zIndex: 999 }}
+            onClick={() => setSwitcherOpen(false)}
+          />
+          <div style={{ ...switcherDropdownStyle, position: "fixed", top: switcherRect.top, left: switcherRect.left, zIndex: 1000 }}>
+            {userGroups.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => { setCurrentGroupId(g.id); setSwitcherOpen(false); }}
+                style={{ ...switcherRowStyle, fontWeight: g.id === group.id ? 600 : 400 }}
+              >
+                <span style={{ flex: 1, textAlign: "left" }}>{g.name}</span>
+                {g.id === group.id && <span style={{ color: "var(--sc-gold)", fontSize: 12 }}>✓</span>}
+              </button>
+            ))}
+            <div style={switcherDividerStyle} />
+            <button
+              type="button"
+              onClick={() => { setSwitcherOpen(false); navigate("/group-setup?tab=join"); }}
+              style={switcherActionStyle}
+            >
+              + Join another group
+            </button>
+            <button
+              type="button"
+              onClick={() => { setSwitcherOpen(false); navigate("/group-setup?tab=create"); }}
+              style={switcherActionStyle}
+            >
+              + Create new group
+            </button>
+          </div>
+        </>,
+        document.body,
+      )}
     </div>
   );
 }
