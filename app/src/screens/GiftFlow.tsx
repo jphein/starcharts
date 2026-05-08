@@ -21,6 +21,7 @@ import { id } from "@instantdb/react";
 import { Sky } from "../components/Sky";
 import { LoadingSky } from "../components/LoadingSky";
 import { PresetGallery } from "../components/PresetGallery";
+import { ErrorScroll } from "../components/ErrorScroll";
 import { db } from "../db/client";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useCurrentGroup } from "../hooks/useCurrentGroup";
@@ -491,7 +492,12 @@ export default function GiftFlow() {
           )}
 
           {submitState.status === "error" && (
-            <p style={errorStyle}>{submitState.message}</p>
+            <ErrorScroll
+              show
+              message={submitState.message}
+              tone="warning"
+              align="left"
+            />
           )}
 
           <div style={buttonRowStyle}>
@@ -1288,14 +1294,6 @@ function secondaryButtonStyle(disabled: boolean): CSSProperties {
     transition: "opacity 120ms ease",
   };
 }
-
-const errorStyle: CSSProperties = {
-  margin: "1rem 0 0",
-  fontFamily: "var(--sc-serif)",
-  fontStyle: "italic",
-  color: "var(--sc-fg-muted)",
-  fontSize: "0.88rem",
-};
 
 const emptyStateStyle: CSSProperties = {
   margin: 0,

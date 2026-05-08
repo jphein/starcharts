@@ -23,6 +23,7 @@ build/
 
 # Tooling cruft
 .playwright-mcp/
+.claude/
 
 # Python (generation tooling)
 venv/
