@@ -87,8 +87,13 @@ export function PresencePanel({ chartId }: PresencePanelProps) {
     keys: ["displayName", "avatarSeed"],
   });
 
-  // peers excludes the current user by default; render them as dots.
-  const peerEntries = Object.values(peers ?? {});
+  // peers excludes the current user by peer ID, but on reconnect the old
+  // connection can briefly linger and show up as a phantom peer. Filter by
+  // user identity too so the current user never sees their own dot.
+  const mySeed = user?.avatarSeed || user?.id || "";
+  const peerEntries = Object.values(peers ?? {}).filter(
+    (p) => !mySeed || p.avatarSeed !== mySeed,
+  );
   if (peerEntries.length === 0) {
     return null;
   }
