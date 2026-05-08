@@ -26,6 +26,43 @@ button, input, textarea, select { font: inherit; color: inherit; }
 
 a { color: inherit; }
 
+/* Hide native number-input spinners cross-browser. The custom
+   <StarStepper /> renders the up/down chevrons on top, themed to
+   the gold + aura vocabulary. Keeping `inputmode="numeric"` and
+   `type="number"` preserves the on-screen numeric keypad on mobile
+   and the native ArrowUp/ArrowDown stepping for keyboard users. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Universal keyboard-focus indicator. Most inputs/buttons in the app
+   set `outline: none` for the painted border treatment, which strips
+   the tab-focus ring entirely. This restores a soft golden aura only
+   when focus arrives via keyboard (Tab/Shift+Tab), so mouse users
+   don't see a ring while keyboard users keep an accessible cue. */
+:focus-visible {
+  outline: 2px solid var(--sc-gold);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Tame the textarea resize grip so it picks up the gold tint instead
+   of the OS-default gray triangle. Only WebKit/Blink expose a
+   pseudo-element for it; Firefox renders nothing custom but still
+   honors `resize: vertical`. */
+textarea::-webkit-resizer {
+  background:
+    linear-gradient(135deg, transparent 50%, var(--sc-stroke) 50%, var(--sc-stroke) 60%, transparent 60%, transparent 70%, var(--sc-gold) 70%, var(--sc-gold) 78%, transparent 78%);
+  border-bottom-right-radius: var(--sc-radius-inline, 8px);
+}
+
 /* Seeds — overwritten at runtime by ThemeProvider. These are the
    midnight/dark defaults so the page paints sensibly even on the
    first frame before useEffect runs. */
