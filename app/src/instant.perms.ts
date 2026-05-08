@@ -222,6 +222,8 @@ const rules = {
         "(request.modifiedFields.all(field, field == 'completedAt') && data.completedAt == null && newData.completedAt != null)" +
         " || " +
         "(request.modifiedFields.all(field, field == 'goalCount') && data.completedAt == null)" +
+        " || " +
+        "(request.modifiedFields.all(field, field == 'name') && data.completedAt == null)" +
         ")",
 
       // Group members may delete active (non-completed) charts — e.g.
