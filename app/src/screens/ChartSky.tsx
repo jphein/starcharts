@@ -613,11 +613,10 @@ export default function ChartSky() {
           <button
             type="button"
             onClick={() => setConfirmDelete(true)}
-            style={iconButtonStyle}
+            style={deleteButtonStyle}
             aria-label="Delete chart"
-            title="Delete chart"
           >
-            🗑
+            🗑 Delete chart
           </button>
         )}
       </header>
@@ -760,6 +759,24 @@ const iconButtonStyle: CSSProperties = {
   flexShrink: 0,
 };
 
+const deleteButtonStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  height: 36,
+  padding: "0 14px",
+  borderRadius: 999,
+  background: "var(--sc-surface)",
+  border: "1px solid var(--sc-stroke)",
+  color: "var(--sc-fg-muted)",
+  fontFamily: "var(--sc-sans)",
+  fontSize: 12,
+  letterSpacing: "0.04em",
+  cursor: "pointer",
+  flexShrink: 0,
+  whiteSpace: "nowrap",
+};
+
 const titleWrapStyle: CSSProperties = {
   flex: 1,
   textAlign: "center",
@@ -782,6 +799,7 @@ const trailingStyle: CSSProperties = {
   alignItems: "center",
   gap: 12,
   flexShrink: 0,
+  marginRight: 12,
 };
 
 const confirmOverlayStyle: CSSProperties = {
