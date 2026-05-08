@@ -609,16 +609,6 @@ export default function ChartSky() {
           />
         </div>
 
-        {chart.completedAt == null && (
-          <button
-            type="button"
-            onClick={() => setConfirmDelete(true)}
-            style={deleteButtonStyle}
-            aria-label="Delete chart"
-          >
-            🗑 Delete chart
-          </button>
-        )}
       </header>
 
       {/*
@@ -666,6 +656,17 @@ export default function ChartSky() {
             Delete
           </button>
         </div>
+      )}
+
+      {chart.completedAt == null && (
+        <button
+          type="button"
+          onClick={() => setConfirmDelete(true)}
+          style={deleteButtonStyle}
+          aria-label="Delete chart"
+        >
+          🗑 Delete chart
+        </button>
       )}
 
       <button
@@ -760,21 +761,28 @@ const iconButtonStyle: CSSProperties = {
 };
 
 const deleteButtonStyle: CSSProperties = {
+  position: "fixed",
+  bottom: 14,
+  // Sits to the right of the Sigil pill (~200px wide) anchored at left: 14px
+  left: 224,
+  zIndex: 50,
   display: "inline-flex",
   alignItems: "center",
   gap: 6,
-  height: 36,
-  padding: "0 14px",
+  height: 32,
+  padding: "0 12px",
   borderRadius: 999,
   background: "var(--sc-surface)",
   border: "1px solid var(--sc-stroke)",
   color: "var(--sc-fg-muted)",
   fontFamily: "var(--sc-sans)",
-  fontSize: 12,
+  fontSize: 11,
   letterSpacing: "0.04em",
   cursor: "pointer",
-  flexShrink: 0,
   whiteSpace: "nowrap",
+  backdropFilter: "blur(14px) saturate(160%)",
+  WebkitBackdropFilter: "blur(14px) saturate(160%)",
+  boxShadow: "0 4px 18px rgba(0,0,0,0.28)",
 };
 
 const titleWrapStyle: CSSProperties = {
@@ -799,7 +807,6 @@ const trailingStyle: CSSProperties = {
   alignItems: "center",
   gap: 12,
   flexShrink: 0,
-  marginRight: 12,
 };
 
 const confirmOverlayStyle: CSSProperties = {
