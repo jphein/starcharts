@@ -8,8 +8,11 @@
 // We publish our own displayName/avatarSeed via useSyncPresence so peers
 // can render us with a name + color too. Caller passes a valid chart id
 // (the chart-gate effects in ChartSky / ConstellationMemory ensure that).
+//
+// The panel is clickable: tapping it opens a popover listing who is here.
 
-import { type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { db } from "../db/client";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 
@@ -46,18 +49,6 @@ const dotStyle: CSSProperties = {
     "0 0 0 1px rgba(255,255,255,0.22), 0 0 8px rgba(255,255,255,0.18)",
 };
 
-const wrapStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 5,
-  padding: "4px 10px",
-  borderRadius: 999,
-  background: "var(--sc-surface)",
-  border: "1px solid var(--sc-stroke)",
-  backdropFilter: "blur(8px)",
-  WebkitBackdropFilter: "blur(8px)",
-};
-
 const chipStyle: CSSProperties = {
   marginLeft: 4,
   fontFamily: "var(--sc-sans)",
@@ -67,8 +58,26 @@ const chipStyle: CSSProperties = {
   fontVariantNumeric: "tabular-nums",
 };
 
+const dropdownStyle: CSSProperties = {
+  minWidth: 180,
+  background: "var(--sc-bg, #0d0a14)",
+  border: "1px solid var(--sc-stroke)",
+  borderRadius: 12,
+  boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+  backdropFilter: "blur(20px)",
+  WebkitBackdropFilter: "blur(20px)",
+  display: "flex",
+  flexDirection: "column",
+  overflow: "hidden",
+  position: "fixed",
+  zIndex: 9999,
+};
+
 export function PresencePanel({ chartId }: PresencePanelProps) {
   const { user } = useCurrentUser();
+  const [open, setOpen] = useState(false);
+  const [rect, setRect] = useState<{ top: number; left: number } | null>(null);
+  const anchorRef = useRef<HTMLButtonElement>(null);
 
   const room = db.room("charts", chartId);
 
@@ -94,6 +103,18 @@ export function PresencePanel({ chartId }: PresencePanelProps) {
   const peerEntries = Object.values(peers ?? {}).filter(
     (p) => !mySeed || p.avatarSeed !== mySeed,
   );
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (anchorRef.current && !anchorRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
   if (peerEntries.length === 0) {
     return null;
   }
@@ -101,20 +122,96 @@ export function PresencePanel({ chartId }: PresencePanelProps) {
   const visible = peerEntries.slice(0, MAX_VISIBLE);
   const overflow = peerEntries.length - visible.length;
 
+  function handleToggle() {
+    if (!open && anchorRef.current) {
+      const r = anchorRef.current.getBoundingClientRect();
+      setRect({ top: r.bottom + 8, left: r.left });
+    }
+    setOpen((o) => !o);
+  }
+
   return (
-    <span style={wrapStyle} aria-label={`${peerEntries.length} viewing`}>
-      {visible.map((p) => {
-        const seed = p.avatarSeed || p.displayName || p.peerId;
-        const title = p.displayName?.trim() || "someone";
-        return (
-          <span
-            key={p.peerId}
-            title={title}
-            style={{ ...dotStyle, background: colorForSeed(seed) }}
-          />
-        );
-      })}
-      {overflow > 0 && <span style={chipStyle}>+ {overflow} here</span>}
-    </span>
+    <>
+      <button
+        ref={anchorRef}
+        type="button"
+        onClick={handleToggle}
+        aria-label={`${peerEntries.length} also viewing — click to see who`}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 5,
+          padding: "4px 10px",
+          borderRadius: 999,
+          background: open ? "rgba(255,255,255,0.07)" : "var(--sc-surface)",
+          border: "1px solid var(--sc-stroke)",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+          cursor: "pointer",
+          transition: "background 150ms ease",
+        }}
+      >
+        {visible.map((p) => {
+          const seed = p.avatarSeed || p.displayName || p.peerId;
+          return (
+            <span
+              key={p.peerId}
+              style={{ ...dotStyle, background: colorForSeed(seed) }}
+            />
+          );
+        })}
+        {overflow > 0 && <span style={chipStyle}>+ {overflow} here</span>}
+      </button>
+
+      {open &&
+        rect &&
+        createPortal(
+          <div style={{ ...dropdownStyle, top: rect.top, left: rect.left }}>
+            <span
+              style={{
+                padding: "8px 14px 6px",
+                fontFamily: "var(--sc-sans)",
+                fontSize: 10,
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                color: "var(--sc-fg-faint)",
+              }}
+            >
+              Also viewing
+            </span>
+            <div style={{ height: 1, background: "var(--sc-stroke)", margin: "0 0 4px" }} />
+            {peerEntries.map((p) => {
+              const seed = p.avatarSeed || p.displayName || p.peerId;
+              const name = p.displayName?.trim() || "Someone";
+              return (
+                <div
+                  key={p.peerId}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "9px 14px",
+                    fontFamily: "var(--sc-sans)",
+                    fontSize: 13,
+                    color: "var(--sc-fg)",
+                  }}
+                >
+                  <span
+                    style={{
+                      ...dotStyle,
+                      width: 10,
+                      height: 10,
+                      background: colorForSeed(seed),
+                      flexShrink: 0,
+                    }}
+                  />
+                  {name}
+                </div>
+              );
+            })}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }

@@ -131,6 +131,18 @@ export default function GiftFlow() {
     }));
   }, [rosterResult.data]);
 
+  // One-time migration: older entries used displayName.toLowerCase() as the
+  // avatarSeed, which causes color collisions when two members share a name.
+  // Update any such entries to use their own ID as the seed instead.
+  useEffect(() => {
+    if (!rosterEntries.length) return;
+    const stale = rosterEntries.filter(
+      (r) => r.avatarSeed === r.displayName.toLowerCase(),
+    );
+    if (!stale.length) return;
+    db.transact(stale.map((r) => db.tx.rosterEntries[r.id].update({ avatarSeed: r.id })));
+  }, [rosterEntries]);
+
   // Hydrate the in-flight gift draft + any summoned custom star if
   // we came back from /summon. Without this, the user's honoree
   // pick + reason text would be lost during the summon detour
@@ -701,10 +713,9 @@ function RosterAddForm({
         db.tx.rosterEntries[newId]
           .update({
             displayName: trimmed,
-            // Avatar is just a color hash today — seed = the lowercased
-            // name, matching ProfileSetup's convention so a roster
-            // "Maya" gets the same color as a $users "Maya" would.
-            avatarSeed: trimmed.toLowerCase(),
+            // Use the entry's own ID as the seed so every roster entry
+            // gets a unique color regardless of name.
+            avatarSeed: newId,
             createdAt: Date.now(),
           })
           .link({ group: groupId }),
@@ -788,7 +799,7 @@ function RosterEditCard({
 }) {
   const [name, setName] = useState(initialName);
   const [submitting, setSubmitting] = useState(false);
-  const previewSeed = name.trim().toLowerCase() || initialSeed || entryId;
+  const previewSeed = initialSeed || entryId;
 
   async function handleSave() {
     const trimmed = name.trim();
@@ -803,7 +814,6 @@ function RosterEditCard({
       await db.transact(
         db.tx.rosterEntries[entryId].update({
           displayName: trimmed,
-          avatarSeed: trimmed.toLowerCase(),
         }),
       );
       onDone();
