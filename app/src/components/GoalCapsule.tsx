@@ -15,9 +15,10 @@
 // below currentTotal flips StarlightFill into belowMin and surfaces an
 // inline italic caption; Enter no-ops in that state.
 
-import { useState, useEffect, useRef, type CSSProperties, type KeyboardEvent } from "react";
+import { useState, useEffect, useRef, type CSSProperties, type FocusEvent, type KeyboardEvent } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { StarlightFill } from "./StarlightFill";
+import { StarStepper } from "./StarStepper";
 
 export interface GoalCapsuleProps {
   totalCount: number;
@@ -115,8 +116,23 @@ export function GoalCapsule({
     }
   };
 
-  const onInputBlur = () => {
+  const onInputBlur = (e: FocusEvent<HTMLInputElement>) => {
+    // If focus is moving into the stepper buttons (or any descendant
+    // marked data-stepper), keep the editor open. Stepper presses use
+    // mousedown+preventDefault to avoid this path entirely, but a
+    // keyboard tab to the stepper would hit it.
+    const next = e.relatedTarget as HTMLElement | null;
+    if (next && next.closest('[data-stepper="true"]')) return;
     if (!committedRef.current) cancelEdit();
+  };
+
+  const stepDraft = (delta: number) => {
+    const base = Number.isFinite(parsedDraft) ? parsedDraft : goalCount;
+    const next = Math.max(1, base + delta);
+    setDraft(String(next));
+    // Refocus the input after a stepper press so subsequent keyboard
+    // ArrowUp/Down (and Enter to commit) keep working seamlessly.
+    inputRef.current?.focus();
   };
 
   const onTriggerKeyDown = (e: KeyboardEvent<HTMLSpanElement>) => {
@@ -150,32 +166,43 @@ export function GoalCapsule({
         <span style={numStyle}>{totalCount}</span>
         <span style={sepStyle}> / </span>
         {editing ? (
-          <input
-            ref={inputRef}
-            type="number"
-            inputMode="numeric"
-            min={1}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={onInputKeyDown}
-            onBlur={onInputBlur}
-            disabled={submitting}
-            aria-label="Edit goal stars"
-            style={{
-              ...numStyle,
-              width: `${Math.max(draft.length, 2)}ch`,
-              minWidth: 36,
-              background: "transparent",
-              border: "none",
-              borderBottom: "1.5px solid var(--sc-gold)",
-              color: "var(--sc-gold)",
-              outline: "none",
-              padding: "0 2px",
-              fontSize: 13,
-              letterSpacing: "0.04em",
-              filter: `drop-shadow(0 0 ${auraRadius}px rgba(255, 235, 180, ${auraOpacity}))`,
-            }}
-          />
+          <span style={editorWrapStyle}>
+            <input
+              ref={inputRef}
+              type="number"
+              inputMode="numeric"
+              min={1}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={onInputKeyDown}
+              onBlur={onInputBlur}
+              disabled={submitting}
+              aria-label="Edit goal stars"
+              style={{
+                ...numStyle,
+                width: `${Math.max(draft.length, 2)}ch`,
+                minWidth: 36,
+                background: "transparent",
+                border: "none",
+                borderBottom: "1.5px solid var(--sc-gold)",
+                color: "var(--sc-gold)",
+                outline: "none",
+                padding: "0 2px",
+                fontSize: 13,
+                letterSpacing: "0.04em",
+                filter: `drop-shadow(0 0 ${auraRadius}px rgba(255, 235, 180, ${auraOpacity}))`,
+              }}
+            />
+            <StarStepper
+              size="sm"
+              onStepUp={() => stepDraft(1)}
+              onStepDown={() => stepDraft(-1)}
+              disableDown={Number.isFinite(parsedDraft) && parsedDraft <= 1}
+              ariaLabelUp="Raise the goal by one"
+              ariaLabelDown="Lower the goal by one"
+              style={{ marginLeft: 4 }}
+            />
+          </span>
         ) : (
           <motion.span
             role={completed ? undefined : "button"}
@@ -239,6 +266,12 @@ const numStyle: CSSProperties = {
 const sepStyle: CSSProperties = {
   margin: "0 4px",
   opacity: 0.6,
+};
+
+const editorWrapStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 0,
 };
 
 const fillSlotStyle: CSSProperties = {

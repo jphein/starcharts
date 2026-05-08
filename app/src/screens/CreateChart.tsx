@@ -4,12 +4,13 @@
 // hero route. Chart fields are immutable per the v1 spec, so this is
 // the only entry point for the trio of values.
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { id } from "@instantdb/react";
 import { Sky } from "../components/Sky";
 import { LoadingSky } from "../components/LoadingSky";
 import { ErrorScroll } from "../components/ErrorScroll";
+import { StarStepper } from "../components/StarStepper";
 import { db } from "../db/client";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useCurrentGroup } from "../hooks/useCurrentGroup";
@@ -27,6 +28,15 @@ export default function CreateChart() {
   const [goal, setGoal] = useState("50");
   const [reward, setReward] = useState("");
   const [submitState, setSubmitState] = useState<SubmitState>({ status: "idle" });
+  const goalInputRef = useRef<HTMLInputElement>(null);
+
+  const stepGoal = (delta: number) => {
+    const parsed = Number.parseInt(goal, 10);
+    const base = Number.isFinite(parsed) ? parsed : 1;
+    const next = Math.max(1, base + delta);
+    setGoal(String(next));
+    goalInputRef.current?.focus();
+  };
 
   // Auth gate: not loading, no user → sign in.
   useEffect(() => {
@@ -115,17 +125,36 @@ export default function CreateChart() {
               <label style={labelStyle} htmlFor="chart-goal">
                 Goal stars
               </label>
-              <input
-                id="chart-goal"
-                type="number"
-                inputMode="numeric"
-                min={1}
-                value={goal}
-                onChange={(e) => setGoal(e.target.value)}
-                disabled={submitting}
-                style={{ ...inputStyle, fontFamily: "var(--sc-serif)" }}
-                required
-              />
+              <div style={goalFieldShellStyle}>
+                <input
+                  ref={goalInputRef}
+                  id="chart-goal"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  value={goal}
+                  onChange={(e) => setGoal(e.target.value)}
+                  disabled={submitting}
+                  style={{
+                    ...inputStyle,
+                    fontFamily: "var(--sc-serif)",
+                    paddingRight: "2.6rem",
+                  }}
+                  required
+                />
+                <span style={goalStepperSlotStyle}>
+                  <StarStepper
+                    size="md"
+                    onStepUp={() => stepGoal(1)}
+                    onStepDown={() => stepGoal(-1)}
+                    disableDown={
+                      Number.isFinite(parsedGoal) && parsedGoal <= 1
+                    }
+                    ariaLabelUp="Add a star to the goal"
+                    ariaLabelDown="Remove a star from the goal"
+                  />
+                </span>
+              </div>
             </div>
 
             <div style={fieldStyle}>
@@ -265,6 +294,19 @@ const inputStyle: React.CSSProperties = {
   fontFamily: "var(--sc-sans)",
   fontSize: "1rem",
   outline: "none",
+};
+
+const goalFieldShellStyle: React.CSSProperties = {
+  position: "relative",
+  width: "100%",
+};
+
+const goalStepperSlotStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "50%",
+  right: "0.55rem",
+  transform: "translateY(-50%)",
+  pointerEvents: "auto",
 };
 
 function primaryButtonStyle(submitting: boolean, disabled: boolean): React.CSSProperties {
