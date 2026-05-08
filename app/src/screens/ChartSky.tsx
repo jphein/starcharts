@@ -89,6 +89,7 @@ export default function ChartSky() {
   }
 
   const startEditingChartName = () => {
+    if (!chart) return;
     setChartNameInput(chart.name);
     setEditingChartName(true);
     setTimeout(() => chartNameInputRef.current?.select(), 0);
@@ -97,7 +98,7 @@ export default function ChartSky() {
   const commitChartNameEdit = async () => {
     const trimmed = chartNameInput.trim();
     setEditingChartName(false);
-    if (trimmed && trimmed !== chart.name && chartId) {
+    if (trimmed && trimmed !== chart?.name && chartId) {
       try {
         await db.transact(db.tx.charts[chartId].update({ name: trimmed }));
       } catch (err) {
