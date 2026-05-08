@@ -71,6 +71,9 @@ export default function ChartSky() {
   const [selectedGift, setSelectedGift] = useState<GiftWithLinks | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editingGoal, setEditingGoal] = useState(false);
+  const [editingChartName, setEditingChartName] = useState(false);
+  const [chartNameInput, setChartNameInput] = useState("");
+  const chartNameInputRef = useRef<HTMLInputElement>(null);
   // Surfaced near the top of the screen for chart-scope failures (e.g.
   // delete rejected by perms). Auto-dismissable.
   const [chartError, setChartError] = useState<string | null>(null);
@@ -84,6 +87,33 @@ export default function ChartSky() {
     if (!chartId) return;
     await db.transact(db.tx.charts[chartId].update({ goalCount: newGoal }));
   }
+
+  const startEditingChartName = () => {
+    setChartNameInput(chart.name);
+    setEditingChartName(true);
+    setTimeout(() => chartNameInputRef.current?.select(), 0);
+  };
+
+  const commitChartNameEdit = async () => {
+    const trimmed = chartNameInput.trim();
+    setEditingChartName(false);
+    if (trimmed && trimmed !== chart.name && chartId) {
+      try {
+        await db.transact(db.tx.charts[chartId].update({ name: trimmed }));
+      } catch (err) {
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : "Couldn't rename this chart — please try again.";
+        setChartError(message);
+      }
+    }
+  };
+
+  const cancelChartNameEdit = () => {
+    setEditingChartName(false);
+    setChartNameInput("");
+  };
 
   // ── Panning + cluster drag ───────────────────────────────────────────────
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -595,7 +625,43 @@ export default function ChartSky() {
         </button>
 
         <div style={titleWrapStyle}>
-          <h1 style={titleStyle}>{chart.name}</h1>
+          {editingChartName ? (
+            <input
+              ref={chartNameInputRef}
+              value={chartNameInput}
+              onChange={(e) => setChartNameInput(e.target.value)}
+              onBlur={commitChartNameEdit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitChartNameEdit();
+                if (e.key === "Escape") cancelChartNameEdit();
+              }}
+              style={{
+                margin: 0,
+                fontFamily: "var(--sc-serif)",
+                fontWeight: 500,
+                fontSize: 18,
+                letterSpacing: "-0.005em",
+                background: "transparent",
+                border: "none",
+                borderBottom: "2px solid var(--sc-gold)",
+                color: "var(--sc-fg)",
+                outline: "none",
+                padding: "0 2px",
+                width: `${Math.max(chartNameInput.length, 4)}ch`,
+                minWidth: 80,
+                maxWidth: 320,
+                textAlign: "center",
+              }}
+            />
+          ) : (
+            <h1
+              onClick={startEditingChartName}
+              title="Click to rename"
+              style={{ ...titleStyle, cursor: "text" }}
+            >
+              {chart.name}
+            </h1>
+          )}
         </div>
 
         <div style={trailingStyle}>
