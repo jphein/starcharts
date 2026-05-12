@@ -270,6 +270,26 @@ const rules = {
     },
   },
 
+  reactions: {
+    allow: {
+      // Visible to members of the reacted gift's chart's group.
+      // Path: reaction → gift → chart → group → members → ids.
+      view: "auth.id != null && auth.id in data.ref('gift.chart.group.members.id')",
+
+      // Any authed user can create. Same realistic-mitigation pattern as
+      // gifts/charts: the view rule above means a reaction written to a
+      // gift the creator isn't a member of is invisible to everyone
+      // immediately after creation.
+      create: "auth.id != null",
+
+      // Only the reactor can remove their own reaction.
+      delete: "auth.id != null && auth.id in data.ref('user.id')",
+
+      // Reactions are immutable — toggling is delete + create.
+      update: "false",
+    },
+  },
+
   rosterEntries: {
     allow: {
       // Members of the entry's group can see it. Path:
