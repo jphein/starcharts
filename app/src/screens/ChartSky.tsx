@@ -754,6 +754,7 @@ export default function ChartSky() {
             gift={selectedGift}
             onClose={() => setSelectedGift(null)}
             currentUserId={user.id}
+            currentUserSeed={user.avatarSeed}
           />
         )}
       </AnimatePresence>

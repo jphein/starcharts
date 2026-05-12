@@ -54,6 +54,14 @@ export const schema = i.schema({
       avatarSeed:  i.string(),
       createdAt:   i.number(),
     }),
+    // Heart reactions on gifts. One row per (user, gift) pair — enforced
+    // client-side by checking for an existing reaction before creating.
+    // emoji is always "heart" for now; the field leaves room for other
+    // reaction types later without a schema migration.
+    reactions: i.entity({
+      emoji:     i.string(),
+      createdAt: i.number(),
+    }),
   },
   links: {
     groupMembers: {
@@ -83,6 +91,14 @@ export const schema = i.schema({
     giftRosterHonorees: {
       forward: { on: "gifts",         has: "many", label: "rosterHonorees" },
       reverse: { on: "rosterEntries", has: "many", label: "received"       },
+    },
+    reactionGift: {
+      forward: { on: "reactions", has: "one",  label: "gift"      },
+      reverse: { on: "gifts",     has: "many", label: "reactions" },
+    },
+    reactionUser: {
+      forward: { on: "reactions", has: "one",  label: "user"      },
+      reverse: { on: "$users",    has: "many", label: "reactions" },
     },
   },
   rooms: {
