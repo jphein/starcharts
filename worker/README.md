@@ -77,20 +77,21 @@ npm run deploy   # publishes to Cloudflare via wrangler
 npm run tail     # streams live logs
 ```
 
-The custom domain `summon.stars.realm.watch` is bound automatically by
+The custom domain `summon.realm.watch` is bound automatically by
 `wrangler deploy` via the `[[routes]]` block in `wrangler.toml` (assuming
 the `realm.watch` zone is in the same Cloudflare account, which it is).
 
 ## Production hostnames
 
-- **Custom domain:** `https://summon.stars.realm.watch` — preferred.
+- **Custom domain:** `https://summon.realm.watch` — preferred (moved from `summon.stars.realm.watch` on 2026-11-14, issue #18: that name never got an edge certificate; its Advanced pack timed out and the Free plan has no quota for another).
 - **workers.dev fallback:** `https://starcharts-summon.jp5.workers.dev`
   — kept alive (`workers_dev = true` in `wrangler.toml`) for LAN smoke
   tests and as a fallback when the custom domain's TLS is misbehaving.
 
-> ⚠️ **Cert state caveat (issue #18):** the custom domain has had a
-> stuck Universal SSL provisioning at times. If `curl
-> https://summon.stars.realm.watch` returns `alert handshake failure
+> ⚠️ **Cert state caveat (issue #18):** the old two-level custom domain
+> never got a certificate (its Advanced pack timed out; the Free plan has no
+> quota to order another). If `curl
+> https://summon.realm.watch` returns `alert handshake failure
 > (552)`, the SPA's `app/src/lib/summon.ts` and `app/src/lib/join.ts`
 > can be temporarily flipped to the workers.dev URL while Cloudflare
 > reprovisions the cert.

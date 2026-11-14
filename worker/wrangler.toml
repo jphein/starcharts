@@ -3,7 +3,7 @@ main = "src/index.ts"
 compatibility_date = "2026-05-03"
 
 # Keep the workers.dev fallback URL alive (LAN smoke tests, manual
-# debugging when summon.stars.realm.watch is acting up). Newer
+# debugging when summon.realm.watch is acting up). Newer
 # wrangler defaults to false; we explicitly opt in.
 workers_dev = true
 preview_urls = true
@@ -31,11 +31,16 @@ bucket_name = "starcharts-customs"
 binding = "RATE_LIMIT_KV"
 id = "ab111d1d263e4f2bab253a1e19e7d82f"
 
-# Custom domain: summon.stars.realm.watch.
-# Cloudflare will create the DNS + cert automatically when this is enabled
-# (assuming the realm.watch zone is in this account, which it is).
+# Custom domain: summon.realm.watch (issue #18, 2026-11-14).
+# A first-level name under realm.watch is covered by the zone's active
+# Universal certificate (*.realm.watch), so no Advanced pack is needed;
+# edge readiness after the bind still takes a moment, so check before use.
+# summon.stars.realm.watch (two levels deep) never got a certificate: its
+# Advanced pack timed out in 2026-05, Resume returns 503, and the Free plan
+# has no quota to order another (0 allocated / 1 used). Wrangler creates
+# the DNS record on deploy (the realm.watch zone is in this account).
 [[routes]]
-pattern = "summon.stars.realm.watch"
+pattern = "summon.realm.watch"
 custom_domain = true
 
 # Local-dev secrets live in .dev.vars (gitignored). For production,

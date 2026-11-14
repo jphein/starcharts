@@ -41,7 +41,8 @@ algorithm stays stable regardless of `core.abbrev`.
 ## Custom-star Worker
 
 For most local SPA work you don't need to run the Worker — the SPA
-defaults to the deployed `summon.stars.realm.watch`. To exercise the
+defaults to the deployed Worker (`summon.realm.watch` once issue #18's
+move is deployed; the workers.dev fallback until then). To exercise the
 custom-star path against a local Worker, see
 [`../worker/README.md`](../worker/README.md), then point the SPA at
 it via `app/.env.local`:
