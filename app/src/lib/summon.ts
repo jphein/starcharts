@@ -10,8 +10,8 @@
 
 // Pointing at the workers.dev URL until the Worker is deployed on its
 // new custom domain summon.realm.watch (issue #18: the old
-// summon.stars.realm.watch never got an edge certificate; the Free plan
-// has no Advanced certificate quota). Flip to
+// summon.stars.realm.watch never got an edge certificate: its Advanced
+// pack timed out and the Free plan has no quota for another). Flip to
 // "https://summon.realm.watch/api/summon" once that hostname serves.
 const DEFAULT_ENDPOINT = "https://starcharts-summon.jp5.workers.dev/api/summon";
 

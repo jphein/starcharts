@@ -32,11 +32,12 @@ binding = "RATE_LIMIT_KV"
 id = "ab111d1d263e4f2bab253a1e19e7d82f"
 
 # Custom domain: summon.realm.watch (issue #18, 2026-11-14).
-# A first-level name under realm.watch is covered by the zone's Universal
-# certificate, so the edge cert exists the moment the domain binds.
-# summon.stars.realm.watch (two levels deep) never got a certificate: the
-# Free plan has no Advanced certificate quota (0 allocated, 1 used by a
-# pack that timed out in 2026-05 and cannot be resumed). Wrangler creates
+# A first-level name under realm.watch is covered by the zone's active
+# Universal certificate (*.realm.watch), so no Advanced pack is needed;
+# edge readiness after the bind still takes a moment, so check before use.
+# summon.stars.realm.watch (two levels deep) never got a certificate: its
+# Advanced pack timed out in 2026-05, Resume returns 503, and the Free plan
+# has no quota to order another (0 allocated / 1 used). Wrangler creates
 # the DNS record on deploy (the realm.watch zone is in this account).
 [[routes]]
 pattern = "summon.realm.watch"

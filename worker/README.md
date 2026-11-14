@@ -83,13 +83,14 @@ the `realm.watch` zone is in the same Cloudflare account, which it is).
 
 ## Production hostnames
 
-- **Custom domain:** `https://summon.realm.watch` — preferred (moved from `summon.stars.realm.watch` on 2026-11-14, issue #18: a two-level name gets no edge certificate on the Free plan).
+- **Custom domain:** `https://summon.realm.watch` — preferred (moved from `summon.stars.realm.watch` on 2026-11-14, issue #18: that name never got an edge certificate; its Advanced pack timed out and the Free plan has no quota for another).
 - **workers.dev fallback:** `https://starcharts-summon.jp5.workers.dev`
   — kept alive (`workers_dev = true` in `wrangler.toml`) for LAN smoke
   tests and as a fallback when the custom domain's TLS is misbehaving.
 
 > ⚠️ **Cert state caveat (issue #18):** the old two-level custom domain
-> never got a certificate (Free plan: no Advanced certificate quota). If `curl
+> never got a certificate (its Advanced pack timed out; the Free plan has no
+> quota to order another). If `curl
 > https://summon.realm.watch` returns `alert handshake failure
 > (552)`, the SPA's `app/src/lib/summon.ts` and `app/src/lib/join.ts`
 > can be temporarily flipped to the workers.dev URL while Cloudflare

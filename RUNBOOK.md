@@ -13,7 +13,7 @@ Live now:
 - ✅ GH Pages custom domain set to `stars.realm.watch`. HTTPS enforced.
 - ✅ R2 bucket `starcharts-customs` created.
 - ✅ Worker `starcharts-summon` deployed with all four Azure secrets set.
-- ✅ Worker custom domain `summon.realm.watch` configured automatically by wrangler (was `summon.stars.realm.watch`; moved 2026-11-14, issue #18: no edge certificate is possible two levels deep on the Free plan).
+- ✅ Worker custom domain `summon.realm.watch` configured automatically by wrangler (was `summon.stars.realm.watch`; moved 2026-11-14, issue #18: that name never got an edge certificate, its Advanced pack timed out and the Free plan has no quota to order another).
 - ✅ InstantDB magic-link email branded — custom subject (`Step into Starcharts — {code}`), From name (`Starcharts`), and HTML body (dark sky + gold ceremony) all set on the InstantDB dashboard.
 - ✅ Static OG/Twitter card (`app/public/og.png`) ships with the SPA; meta tags in `app/index.html`.
 - ✅ Visible `<Sigil />` version badge mounted at app shell, reading `/version.json`.
@@ -146,10 +146,9 @@ custom_domain = true
 ```
 
 When you `wrangler deploy`, Wrangler asks Cloudflare to bind the
-custom domain. If `realm.watch` is on Cloudflare DNS, it provisions
-the CNAME automatically. If `realm.watch` is hosted elsewhere, add a
-manual CNAME for `summon.realm.watch` pointing at the Worker's
-`*.workers.dev` hostname.
+custom domain and creates its DNS record (the `realm.watch` zone is in
+this account; a Workers custom domain needs a Cloudflare-managed zone,
+a manual CNAME elsewhere is not a substitute).
 
 ### Moving the Worker to summon.realm.watch (issue #18, 2026-11-14)
 
@@ -172,11 +171,13 @@ curl -sS -X POST https://summon.realm.watch/api/summon -H 'Content-Type: applica
 ```
 
 After that serves: flip `app/src/lib/summon.ts` and `app/src/lib/join.ts`
-from the workers.dev fallback to `https://summon.realm.watch/…` (one PR),
-remove the old custom domain `summon.stars.realm.watch` under Workers &
-Pages → starcharts-summon → Domains (dashboard), and then its leftover DNS
-rows (the proxied `AAAA 100::` placeholder and the three CAA records added
-2026-11-13). The old hostname never served TLS, so nothing redirects from it.
+from the workers.dev fallback to `https://summon.realm.watch/…` (one PR).
+Wrangler reconciles the Worker's custom-domain set on deploy, so the old
+`summon.stars.realm.watch` is normally detached by the same deploy: verify
+under Workers & Pages → starcharts-summon → Domains and remove it only if it
+is still listed; then its leftover DNS rows (the proxied `AAAA 100::`
+placeholder and the three CAA records added 2026-11-13). The old hostname
+never served TLS, so nothing redirects from it.
 
 Test:
 
