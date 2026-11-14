@@ -13,7 +13,7 @@ Live now:
 - ✅ GH Pages custom domain set to `stars.realm.watch`. HTTPS enforced.
 - ✅ R2 bucket `starcharts-customs` created.
 - ✅ Worker `starcharts-summon` deployed with all four Azure secrets set.
-- ✅ Worker custom domain `summon.stars.realm.watch` configured automatically by wrangler.
+- ✅ Worker custom domain `summon.realm.watch` configured automatically by wrangler (was `summon.stars.realm.watch`; moved 2026-11-14, issue #18: no edge certificate is possible two levels deep on the Free plan).
 - ✅ InstantDB magic-link email branded — custom subject (`Step into Starcharts — {code}`), From name (`Starcharts`), and HTML body (dark sky + gold ceremony) all set on the InstantDB dashboard.
 - ✅ Static OG/Twitter card (`app/public/og.png`) ships with the SPA; meta tags in `app/index.html`.
 - ✅ Visible `<Sigil />` version badge mounted at app shell, reading `/version.json`.
@@ -27,7 +27,7 @@ Live now:
 > [github.com/jphein/starcharts](https://github.com/jphein/starcharts).
 >
 > Production hostname: **`stars.realm.watch`** (web app),
-> **`summon.stars.realm.watch`** (Worker). The default GH Pages URL
+> **`summon.realm.watch`** (Worker). The default GH Pages URL
 > `https://jphein.github.io/starcharts/` is a fallback.
 
 ---
@@ -37,7 +37,7 @@ Live now:
 | Component | Where it lives | URL | How it's deployed |
 |---|---|---|---|
 | **Web app** | GitHub Pages (`jphein/starcharts`) | `https://stars.realm.watch` (custom) — falls back to `https://jphein.github.io/starcharts/` | GH Actions on push to `main` (`.github/workflows/deploy.yml`) |
-| **Summon Worker** | Cloudflare Workers (`starcharts-summon`) | `https://summon.stars.realm.watch/api/summon` (or the `*.workers.dev` route until DNS) | `cd worker && npx wrangler deploy` |
+| **Summon Worker** | Cloudflare Workers (`starcharts-summon`) | `https://summon.realm.watch/api/summon` (or the `*.workers.dev` route until DNS) | `cd worker && npx wrangler deploy` |
 | **Custom star storage** | Cloudflare R2 bucket `starcharts-customs` | served via Worker at `/r2/<key>` (or `PUBLIC_BUCKET_URL/<key>` once R2 public access is wired) | Worker writes on each successful summon |
 | **Database / auth** | InstantDB (`e526d9cf-e783-4a99-b3b3-a69730ecdd7e`) | client-side via `@instantdb/react` | Schema editing via [InstantDB dashboard](https://instantdb.com/dash) |
 | **Magic-link mail** | InstantDB managed (custom subject + From + HTML body set) | n/a | InstantDB sends. Template lives on the dashboard, not in this repo — see [Magic-link email branding](#magic-link-email-branding) |
@@ -141,20 +141,47 @@ The Worker route is already configured in `worker/wrangler.toml`:
 
 ```
 [[routes]]
-pattern = "summon.stars.realm.watch"
+pattern = "summon.realm.watch"
 custom_domain = true
 ```
 
 When you `wrangler deploy`, Wrangler asks Cloudflare to bind the
 custom domain. If `realm.watch` is on Cloudflare DNS, it provisions
 the CNAME automatically. If `realm.watch` is hosted elsewhere, add a
-manual CNAME for `summon.stars.realm.watch` pointing at the Worker's
+manual CNAME for `summon.realm.watch` pointing at the Worker's
 `*.workers.dev` hostname.
+
+### Moving the Worker to summon.realm.watch (issue #18, 2026-11-14)
+
+The deploy needs the Cloudflare login, so it is one sitting at the
+desktop that holds it:
+
+```sh
+cd ~/Projects/starcharts/worker
+npx wrangler login          # opens the browser once; skip if already logged in
+npx wrangler deploy         # binds summon.realm.watch, creates its DNS record
+```
+
+Then, from anywhere:
+
+```sh
+echo | openssl s_client -servername summon.realm.watch -connect summon.realm.watch:443 2>/dev/null \
+  | openssl x509 -noout -subject -issuer -enddate     # the Universal cert, *.realm.watch
+curl -sS -X POST https://summon.realm.watch/api/summon -H 'Content-Type: application/json' \
+  -d '{"prompt":"a star made of fireflies"}'          # → { "url": … } or a 429 body
+```
+
+After that serves: flip `app/src/lib/summon.ts` and `app/src/lib/join.ts`
+from the workers.dev fallback to `https://summon.realm.watch/…` (one PR),
+remove the old custom domain `summon.stars.realm.watch` under Workers &
+Pages → starcharts-summon → Domains (dashboard), and then its leftover DNS
+rows (the proxied `AAAA 100::` placeholder and the three CAA records added
+2026-11-13). The old hostname never served TLS, so nothing redirects from it.
 
 Test:
 
 ```sh
-curl -sS -X POST https://summon.stars.realm.watch/api/summon \
+curl -sS -X POST https://summon.realm.watch/api/summon \
   -H 'Content-Type: application/json' \
   -d '{"prompt":"a star made of fireflies"}'
 # → { "url": "https://.../uuid.png" }

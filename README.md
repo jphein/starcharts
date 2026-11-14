@@ -118,7 +118,7 @@ starcharts/
         custom-star summon ────────┼──────► POST /api/summon
                                    ▼
                   ┌───────────────────────────────┐
-                  │ summon.stars.realm.watch      │  Cloudflare Worker
+                  │ summon.realm.watch            │  Cloudflare Worker
                   │ (starcharts-summon)           │
                   └───────┬──────────────┬────────┘
                           │              │

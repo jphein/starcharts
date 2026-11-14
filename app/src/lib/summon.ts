@@ -8,12 +8,11 @@
 // surface that as a `RateLimitError` so SummonFlow can render a
 // calmer "the sky is full" message instead of the generic failure path.
 
-// Temporarily pointing at the workers.dev URL while the cert for
-// summon.stars.realm.watch reprovisions on the Cloudflare edge —
-// TLS handshake against the custom domain returned `alert
-// handshake failure (552)` from inside the LAN, while the same
-// Worker behind workers.dev served fine. Swap this back once the
-// custom-domain cert is healthy.
+// Pointing at the workers.dev URL until the Worker is deployed on its
+// new custom domain summon.realm.watch (issue #18: the old
+// summon.stars.realm.watch never got an edge certificate; the Free plan
+// has no Advanced certificate quota). Flip to
+// "https://summon.realm.watch/api/summon" once that hostname serves.
 const DEFAULT_ENDPOINT = "https://starcharts-summon.jp5.workers.dev/api/summon";
 
 export const SUMMON_ENDPOINT =
