@@ -8,12 +8,10 @@
 // surface that as a `RateLimitError` so SummonFlow can render a
 // calmer "the sky is full" message instead of the generic failure path.
 
-// Pointing at the workers.dev URL until the Worker is deployed on its
-// new custom domain summon.realm.watch (issue #18: the old
-// summon.stars.realm.watch never got an edge certificate: its Advanced
-// pack timed out and the Free plan has no quota for another). Flip to
-// "https://summon.realm.watch/api/summon" once that hostname serves.
-const DEFAULT_ENDPOINT = "https://starcharts-summon.jp5.workers.dev/api/summon";
+// summon.realm.watch: the Worker's custom domain (issue #18 Fix B, deployed 2026-11-15), a
+// first-level name under the realm.watch Universal certificate. The workers.dev URL stays as
+// the fallback for LAN smoke tests (VITE_SUMMON_ENDPOINT overrides).
+const DEFAULT_ENDPOINT = "https://summon.realm.watch/api/summon";
 
 export const SUMMON_ENDPOINT =
   (import.meta.env.VITE_SUMMON_ENDPOINT as string | undefined) ?? DEFAULT_ENDPOINT;
