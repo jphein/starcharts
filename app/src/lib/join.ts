@@ -15,8 +15,7 @@
 // failure path. 401 (invalid auth token) is also surfaced as a
 // JoinError — the UI prompts the user to re-sign-in.
 
-const DEFAULT_ENDPOINT =
-  "https://starcharts-summon.jp5.workers.dev/api/join-group";
+const DEFAULT_ENDPOINT = "https://summon.realm.watch/api/join-group";
 
 export const JOIN_ENDPOINT =
   (import.meta.env.VITE_JOIN_ENDPOINT as string | undefined) ?? DEFAULT_ENDPOINT;
