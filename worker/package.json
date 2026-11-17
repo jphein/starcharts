@@ -5,9 +5,10 @@
   "description": "Cloudflare Worker proxy from the Starcharts app to Azure AI Foundry gpt-image-1.5, storing generated PNGs in R2.",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler deploy --var SIGIL_HASH:$(git rev-parse --short HEAD) --var SIGIL_BRANCH:$(git rev-parse --abbrev-ref HEAD) --var SIGIL_DIRTY:$(git diff --quiet HEAD && echo false || echo true) --var SIGIL_BUILT:$(date -u +%Y-%m-%dT%H:%M:%SZ)",
     "tail": "wrangler tail",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/version.test.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260101.0",

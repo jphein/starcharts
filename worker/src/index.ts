@@ -34,8 +34,14 @@
 //   - PUBLIC_BUCKET_URL        optional public R2 prefix
 
 import { init as initAdminDb } from "@instantdb/admin";
+import { versionObject } from "./vendor/realm-sigil/index.js";
 
 export interface Env {
+  // realm-sigil build stamp, set by `npm run deploy` (--var); absent in `wrangler dev`.
+  SIGIL_HASH?: string;
+  SIGIL_BRANCH?: string;
+  SIGIL_DIRTY?: string;
+  SIGIL_BUILT?: string;
   BUCKET: R2Bucket;
   // Optional — Worker boots without it and skips rate-limiting until
   // the namespace is provisioned (see wrangler.toml comment).
@@ -104,6 +110,26 @@ const SYSTEM_PREFIX =
 const SYSTEM_SUFFIX =
   "Painterly fantasy illustration, jewel-like, ornate, with a subtle aura and small sparkle accents. No big halo. Centered on a transparent canvas.";
 
+// realm-sigil /api/version (JP 2026-11-17 05:07: every web project in status carries the sigil; status.realm.watch's
+// CHECK sigil-coverage reads it). Public: names the build, nothing else. Without a stamped hash it says "dev".
+export function versionResponse(env: Pick<Env, "SIGIL_HASH" | "SIGIL_BRANCH" | "SIGIL_DIRTY" | "SIGIL_BUILT">): Response {
+  const hash = /^[0-9a-f]{7,40}$/.test(env.SIGIL_HASH ?? "") ? (env.SIGIL_HASH as string) : "dev";
+  const body = versionObject({
+    name: "starcharts-summon",
+    description: "Star summon Worker (starcharts)",
+    realm: "stellar",
+    repo: "https://github.com/jphein/starcharts",
+    hash,
+    branch: env.SIGIL_BRANCH || "unknown",
+    dirty: hash === "dev" || env.SIGIL_DIRTY === "true",
+    built: env.SIGIL_BUILT || "unknown",
+    runtime: "cloudflare-workers",
+  });
+  return new Response(JSON.stringify(body), {
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
+}
+
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -119,6 +145,10 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/api/join-group") {
       return withCors(await handleJoinGroup(request, env), origin);
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/version") {
+      return withCors(versionResponse(env), origin);
     }
 
     if (request.method === "GET" && url.pathname.startsWith("/r2/")) {
